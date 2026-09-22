@@ -1,0 +1,7 @@
+{
+  "name": "RaithaDrishti",
+  "description": "Smart crop pathology diagnostics, Karnataka APMC mandi price curves & arbitrage, and hyper-local weather advisory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

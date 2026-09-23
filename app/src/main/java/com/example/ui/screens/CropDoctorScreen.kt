@@ -410,7 +410,7 @@ fun CropDoctorScreen(
                                 modifier = Modifier.size(26.dp)
                             )
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = when (currentLang) {
                                     AppLanguage.KANNADA -> "ಧ್ವನಿ ನಿಯಂತ್ರಣ (Hands-Free Voice)"
@@ -570,6 +570,7 @@ fun CropDoctorScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -881,75 +882,81 @@ fun CropDoctorScreen(
                 .testTag("karnataka_seasonal_growth_tips_card"),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // Header row with Tips Icon and Full Title / Subtitle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(Color(0xFFE8F5E9), CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFFE8F5E9), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.TipsAndUpdates,
-                                contentDescription = "Growth Tips",
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = when (currentLang) {
-                                    AppLanguage.KANNADA -> "ಕಾಲೋಚಿತ ಬೆಳೆ ಮಾರ್ಗದರ್ಶಿ (AI Growth Tips)"
-                                    AppLanguage.HINDI -> "मौसमी फसल सलाह (AI Growth Tips)"
-                                    AppLanguage.ENGLISH -> "Karnataka Seasonal Growth Tips (AI)"
-                                },
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            val cropNameDisplay = when (currentLang) {
-                                AppLanguage.KANNADA -> seasonalGrowthTip.cropNameKn
-                                AppLanguage.HINDI -> seasonalGrowthTip.cropNameHi
-                                AppLanguage.ENGLISH -> seasonalGrowthTip.cropNameEn
-                            }
-                            val stageDisplay = when (currentLang) {
-                                AppLanguage.KANNADA -> seasonalGrowthTip.currentSeasonStageKn
-                                AppLanguage.HINDI -> seasonalGrowthTip.currentSeasonStageHi
-                                AppLanguage.ENGLISH -> seasonalGrowthTip.currentSeasonStageEn
-                            }
-                            Text(
-                                text = "$cropNameDisplay • $stageDisplay",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF2E7D32),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.TipsAndUpdates,
+                            contentDescription = "Growth Tips",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
-
-                    Surface(
-                        color = Color(0xFFE0F2F1),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = when (currentLang) {
+                                AppLanguage.KANNADA -> "ಕಾಲೋಚಿತ ಬೆಳೆ ಮಾರ್ಗದರ್ಶಿ (AI Growth Tips)"
+                                AppLanguage.HINDI -> "मौसमी फसल सलाह (AI Growth Tips)"
+                                AppLanguage.ENGLISH -> "Karnataka Seasonal Growth Tips (AI)"
+                            },
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        val cropNameDisplay = when (currentLang) {
+                            AppLanguage.KANNADA -> seasonalGrowthTip.cropNameKn
+                            AppLanguage.HINDI -> seasonalGrowthTip.cropNameHi
+                            AppLanguage.ENGLISH -> seasonalGrowthTip.cropNameEn
+                        }
+                        val stageDisplay = when (currentLang) {
+                            AppLanguage.KANNADA -> seasonalGrowthTip.currentSeasonStageKn
+                            AppLanguage.HINDI -> seasonalGrowthTip.currentSeasonStageHi
+                            AppLanguage.ENGLISH -> seasonalGrowthTip.currentSeasonStageEn
+                        }
+                        Text(
+                            text = "$cropNameDisplay • $stageDisplay",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Weather Risk Badge placed safely on its own row to prevent squishing title
+                Surface(
+                    color = Color(0xFFE0F2F1),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF80CBC4)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "🛡️ " + when (currentLang) {
                                 AppLanguage.KANNADA -> seasonalGrowthTip.weatherRiskBadgeKn
                                 AppLanguage.HINDI -> seasonalGrowthTip.weatherRiskBadgeHi
                                 AppLanguage.ENGLISH -> seasonalGrowthTip.weatherRiskBadgeEn
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFF00695C),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }

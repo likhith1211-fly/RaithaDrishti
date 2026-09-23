@@ -25,13 +25,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SwitchAccount
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -83,15 +79,12 @@ fun HistoryProfileScreen(
     val historyList by viewModel.diagnosesHistory.collectAsState()
     val currentAccount by viewModel.currentAccount.collectAsState()
     val allAccounts by viewModel.allFarmerAccounts.collectAsState()
-    val activePhone by viewModel.activeFarmerPhone.collectAsState()
     val activeFarmerName by viewModel.activeFarmerName.collectAsState()
     val activeVillage by viewModel.activeVillageName.collectAsState()
     val activeBirthYear by viewModel.activeBirthYear.collectAsState()
     val activeFarmerId by viewModel.activeFarmerId.collectAsState()
 
-    var showSignInDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
-    var showStorageProofDialog by remember { mutableStateOf(false) }
     var viewingDiagnosisResult by remember { mutableStateOf<Pair<CropDiagnosisResult, String>?>(null) }
 
     LazyColumn(
@@ -134,8 +127,8 @@ fun HistoryProfileScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ರೈತರ ಪ್ರೊಫೈಲ್ ಹೊಸದಾಗಿ ನಮೂದಿಸಿ"
-                                AppLanguage.HINDI -> "नया किसान प्रोफ़ाइल दर्ज करें"
+                                AppLanguage.KANNADA -> "ರೈತರ ಪ್ರೊಫೈಲ್ ರಚಿಸಿ"
+                                AppLanguage.HINDI -> "किसान प्रोफ़ाइल दर्ज करें"
                                 AppLanguage.ENGLISH -> "Enter Your Farmer Profile"
                             },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -144,51 +137,30 @@ fun HistoryProfileScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ನಿಮ್ಮ ಸ್ವಂತ ಹೆಸರು, ಗ್ರಾಮ ಮತ್ತು ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ ನಿಮ್ಮ ಬೆಳೆ ರೋಗ ವರದಿಗಳು ಮತ್ತು ಮಂಡಿ ವಿವರಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿರಿಸಿ."
-                                AppLanguage.HINDI -> "फसल रोग और मंडी रिकॉर्ड सुरक्षित रखने के लिए अपना नाम, गांव और मोबाइल नंबर दर्ज करें।"
-                                AppLanguage.ENGLISH -> "Enter your name, village, and mobile number to save your pathology prescriptions and mandi records."
+                                AppLanguage.KANNADA -> "ನಿಮ್ಮ ಸ್ವಂತ ಹೆಸರು, ಗ್ರಾಮ ಮತ್ತು ಮುಖ್ಯ ಬೆಳೆಗಳನ್ನು ನಮೂದಿಸಿ ನಿಮ್ಮ ಬೆಳೆ ರೋಗ ವರದಿಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿರಿಸಿ."
+                                AppLanguage.HINDI -> "फसल रोग और मंडी रिकॉर्ड सुरक्षित रखने के लिए अपना नाम, गांव और मुख्य फसलें दर्ज करें।"
+                                AppLanguage.ENGLISH -> "Enter your name, village, and primary crops to personalize your farm pathology prescriptions."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Button(
+                            onClick = { showEditProfileDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("enter_farmer_details_button")
                         ) {
-                            Button(
-                                onClick = { showEditProfileDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("enter_farmer_details_button")
-                            ) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    when (currentLang) {
-                                        AppLanguage.KANNADA -> "ವಿವರ ಹೊಸದಾಗಿ ನಮೂದಿಸಿ"
-                                        AppLanguage.HINDI -> "विवरण नया दर्ज करें"
-                                        AppLanguage.ENGLISH -> "Enter Details Newly"
-                                    }
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { showSignInDialog = true },
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("open_signin_dialog_button")
-                            ) {
-                                Icon(imageVector = Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    when (currentLang) {
-                                        AppLanguage.KANNADA -> "ಸೈನ್ ಇನ್"
-                                        AppLanguage.HINDI -> "साइन इन"
-                                        AppLanguage.ENGLISH -> "Sign In"
-                                    }
-                                )
-                            }
+                            Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                when (currentLang) {
+                                    AppLanguage.KANNADA -> "ಪ್ರೊಫೈಲ್ ನಮೂದಿಸಿ"
+                                    AppLanguage.HINDI -> "विवरण दर्ज करें"
+                                    AppLanguage.ENGLISH -> "Enter Details"
+                                }
+                            )
                         }
                     }
                 }
@@ -245,31 +217,13 @@ fun HistoryProfileScreen(
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     }
-                                    if (activePhone.isNotBlank()) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.Phone,
-                                                contentDescription = null,
-                                                tint = Color(0xFF2E7D32),
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "+91 $activePhone",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF2E7D32)
-                                            )
-                                            val dist = currentAccount?.district ?: ""
-                                            if (dist.isNotBlank()) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "• $dist",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.outline
-                                                )
-                                            }
-                                        }
+                                    val dist = currentAccount?.district ?: ""
+                                    if (dist.isNotBlank()) {
+                                        Text(
+                                            text = "ಜಿಲ್ಲೆ: $dist",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
                             }
@@ -303,55 +257,7 @@ fun HistoryProfileScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant
                         )
 
-                        // Permanent Storage Status & Identity Key Display
-                        Surface(
-                            color = ForestGreenPrimary.copy(alpha = 0.08f),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = when (currentLang) {
-                                            AppLanguage.KANNADA -> "🔒 ಶಾಶ್ವತ ಸಂಗ್ರಹ ಗ್ಯಾರಂಟಿ (ಖಚಿತ ರಕ್ಷಣೆ)"
-                                            AppLanguage.HINDI -> "🔒 स्थायी डेटा सुरक्षा (रिफ्रेश पर सुरक्षित)"
-                                            AppLanguage.ENGLISH -> "🔒 Permanent Storage Guarantee"
-                                        },
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = Color(0xFF1B5E20)
-                                    )
-                                    Surface(
-                                        color = Color(0xFF2E7D32),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "PERSISTED",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = when (currentLang) {
-                                        AppLanguage.KANNADA -> "ನಿಮ್ಮ ಹೆಸರು ($activeFarmerName)${if (activeVillage.isNotBlank()) ", ಗ್ರಾಮ ($activeVillage)" else ""} ಅಡಿಯಲ್ಲಿ ಎಲ್ಲಾ ರೋಗ ವರದಿಗಳು ಸಾಧನದಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿವೆ."
-                                        AppLanguage.HINDI -> "आपका सारा डेटा नाम ($activeFarmerName)${if (activeVillage.isNotBlank()) ", गांव ($activeVillage)" else ""} के तहत सुरक्षित सहेजा गया है।"
-                                        AppLanguage.ENGLISH -> "All records are securely saved under $activeFarmerName${if (activeVillage.isNotBlank()) ", $activeVillage" else ""} in local Room and device backup storage."
-                                    },
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
                         if ((currentAccount?.primaryCrops ?: "").isNotBlank() || (currentAccount?.landSizeAcres ?: 0.0) > 0.0) {
-                            Spacer(modifier = Modifier.height(12.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -394,53 +300,32 @@ fun HistoryProfileScreen(
                                     }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(14.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Buttons: Sign-in / Switch Account AND Verify Storage
-                        Row(
+                        Button(
+                            onClick = { showEditProfileDialog = true },
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Button(
-                                onClick = { showSignInDialog = true },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.SwitchAccount,
-                                    contentDescription = null,
-                                    tint = Color(0xFF2E7D32),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = when (currentLang) {
-                                        AppLanguage.KANNADA -> "ಖಾತೆ ಬದಲಿಸಿ / ಸೈನ್ ಇನ್"
-                                        AppLanguage.HINDI -> "खाता बदलें / साइन इन"
-                                        AppLanguage.ENGLISH -> "Switch / Sign In"
-                                    },
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF2E7D32),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { showStorageProofDialog = true },
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = when (currentLang) {
-                                        AppLanguage.KANNADA -> "ಸಂಗ್ರಹ ಲೆಕ್ಕ ನೋಡಿ"
-                                        AppLanguage.HINDI -> "डेटा देखें"
-                                        AppLanguage.ENGLISH -> "View Stored File"
-                                    },
-                                    fontSize = 11.sp
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when (currentLang) {
+                                    AppLanguage.KANNADA -> "ಪ್ರೊಫೈಲ್ ಬದಲಾಯಿಸಿ"
+                                    AppLanguage.HINDI -> "प्रोफ़ाइल संपादित करें"
+                                    AppLanguage.ENGLISH -> "Edit Profile"
+                                },
+                                fontSize = 12.sp,
+                                color = Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -477,7 +362,7 @@ fun HistoryProfileScreen(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = "📱 $activePhone",
+                        text = "${historyList.size}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF2E7D32),
@@ -502,9 +387,9 @@ fun HistoryProfileScreen(
                     ) {
                         Text(
                             text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಈ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯಲ್ಲಿ ಇನ್ನೂ ಯಾವುದೇ ದಾಖಲೆಗಳಿಲ್ಲ."
-                                AppLanguage.HINDI -> "इस नंबर पर कोई सुरक्षित रिकॉर्ड नहीं है।"
-                                AppLanguage.ENGLISH -> "No saved crop diagnoses for this farmer account yet."
+                                AppLanguage.KANNADA -> "ಇನ್ನೂ ಯಾವುದೇ ರೋಗ ತಪಾಸಣೆ ದಾಖಲೆಗಳಿಲ್ಲ."
+                                AppLanguage.HINDI -> "कोई सुरक्षित रोग रिकॉर्ड नहीं है।"
+                                AppLanguage.ENGLISH -> "No saved crop diagnoses yet."
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
@@ -513,9 +398,9 @@ fun HistoryProfileScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ರೋಗ ತಪಾಸಣೆ ಟ್ಯಾಬ್‌ನಿಂದ ಚಿತ್ರ ತೆಗೆದು ತಪಾಸಣೆ ಮಾಡಿ, ಇಲ್ಲಿ ಶಾಶ್ವತವಾಗಿ ಉಳಿಯುತ್ತದೆ!"
-                                AppLanguage.HINDI -> "फसल जांच टैब से फोटो खींचकर जांचें, यहां सुरक्षित रहेगा।"
-                                AppLanguage.ENGLISH -> "Run AI diagnostics from the Crop Doctor tab. It is automatically saved and retrieved on every sign in."
+                                AppLanguage.KANNADA -> "ಬೆಳೆ ವೈದ್ಯ ಟ್ಯಾಬ್‌ನಿಂದ ಫೋಟೋ ತೆಗೆದು ತಪಾಸಣೆ ಮಾಡಿ, ವರದಿಗಳು ಇಲ್ಲಿ ಉಳಿಯುತ್ತವೆ."
+                                AppLanguage.HINDI -> "फसल डॉक्टर टैब से फोटो खींचकर जांचें, रिपोर्ट यहां सुरक्षित रहेगी।"
+                                AppLanguage.ENGLISH -> "Diagnose crops in the Crop Doctor tab to see your prescriptions saved here."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -553,259 +438,26 @@ fun HistoryProfileScreen(
         )
     }
 
-    // Farmer Sign-In / Switch Account Dialog
-    if (showSignInDialog) {
-        var inputPhone by remember { mutableStateOf(activePhone) }
-        var inputName by remember { mutableStateOf(activeFarmerName) }
-        var inputVillage by remember { mutableStateOf(activeVillage) }
-        var inputBirthYear by remember { mutableStateOf(if (activeBirthYear > 0) activeBirthYear.toString() else "") }
-        var inputDistrict by remember { mutableStateOf(currentAccount?.district ?: "Bengaluru Rural") }
-        var inputCrops by remember { mutableStateOf(currentAccount?.primaryCrops ?: "") }
-        var inputAcres by remember { mutableStateOf(if ((currentAccount?.landSizeAcres ?: 0.0) > 0.0) currentAccount?.landSizeAcres.toString() else "") }
-
-        AlertDialog(
-            onDismissRequest = { showSignInDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Login,
-                    contentDescription = null,
-                    tint = Color(0xFF2E7D32),
-                    modifier = Modifier.size(32.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ರೈತರ ಸೈನ್ ಇನ್ (ಶಾಶ್ವತ ಡೇಟಾಬೇಸ್)"
-                        AppLanguage.HINDI -> "किसान साइन इन (स्थायी डेटाबेस)"
-                        AppLanguage.ENGLISH -> "Farmer Sign-In (Permanent Storage)"
-                    },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = when (currentLang) {
-                            AppLanguage.KANNADA -> "ನಿಮ್ಮ ಹೆಸರು, ಗ್ರಾಮ ಮತ್ತು ಜನನ ವರ್ಷ ನಮೂದಿಸಿ. ನಿಮ್ಮ ಎಲ್ಲಾ ರೋಗ ವರದಿಗಳು ಮತ್ತು ಮಾಹಿತಿ ಸುರಕ್ಷಿತವಾಗಿ ಲೋಡ್ ಆಗುತ್ತವೆ."
-                            AppLanguage.HINDI -> "अपना नाम, गांव और जन्म वर्ष दर्ज करें। आपका सारा डेटा लोड हो जाएगा।"
-                            AppLanguage.ENGLISH -> "Enter your name, village, and birth year. All your saved prescriptions and farm records will be retrieved."
-                        },
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-
-                    OutlinedTextField(
-                        value = inputName,
-                        onValueChange = { inputName = it },
-                        label = { Text("Farmer Name (ರೈತರ ಹೆಸರು)") },
-                        placeholder = { Text("Enter farmer name...") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = inputVillage,
-                            onValueChange = { inputVillage = it },
-                            label = { Text("Village (ಗ್ರಾಮ)") },
-                            modifier = Modifier.weight(1.2f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = inputBirthYear,
-                            onValueChange = { inputBirthYear = it },
-                            label = { Text("DOB Year (ಜನನ ವರ್ಷ)") },
-                            placeholder = { Text("YYYY") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(0.8f),
-                            singleLine = true
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = inputPhone,
-                            onValueChange = { inputPhone = it },
-                            label = { Text("Mobile (ಮೊಬೈಲ್)") },
-                            placeholder = { Text("Mobile number") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = inputDistrict,
-                            onValueChange = { inputDistrict = it },
-                            label = { Text("District (ಜಿಲ್ಲೆ)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                    }
-
-                    // Previously saved accounts chips to quickly switch!
-                    if (allAccounts.isNotEmpty()) {
-                        Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾದ ಖಾತೆಗಳು:"
-                                AppLanguage.HINDI -> "सुरक्षित खाते:"
-                                AppLanguage.ENGLISH -> "Saved Accounts on this Device:"
-                            },
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            allAccounts.take(3).forEach { acc ->
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (acc.farmerId == activeFarmerId) Color(0xFF2E7D32) else MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier.clickable {
-                                        inputPhone = acc.phoneNumber
-                                        inputName = acc.fullName
-                                        inputVillage = acc.village
-                                        inputBirthYear = if (acc.birthYear > 0) acc.birthYear.toString() else ""
-                                        inputDistrict = acc.district
-                                        inputCrops = acc.primaryCrops
-                                        inputAcres = if (acc.landSizeAcres > 0.0) acc.landSizeAcres.toString() else ""
-                                    }
-                                ) {
-                                    Text(
-                                        text = "${acc.fullName} (${acc.village})",
-                                        fontSize = 11.sp,
-                                        color = if (acc.farmerId == activeFarmerId) Color.White else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val acres = inputAcres.toDoubleOrNull() ?: 0.0
-                        val year = inputBirthYear.toIntOrNull() ?: 0
-                        viewModel.signInOrRegisterFarmer(
-                            phone = inputPhone.trim(),
-                            name = inputName.trim(),
-                            village = inputVillage.trim(),
-                            district = inputDistrict.trim(),
-                            crops = inputCrops.trim(),
-                            acres = acres,
-                            birthYear = year
-                        )
-                        showSignInDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Text(
-                        when (currentLang) {
-                            AppLanguage.KANNADA -> "ಸೈನ್ ಇನ್ ಮಾಡಿ / ಡೇಟಾ ಪಡೆಯಿರಿ"
-                            AppLanguage.HINDI -> "साइन इन करें / डेटा लोड करें"
-                            AppLanguage.ENGLISH -> "Sign In & Fetch Data"
-                        }
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignInDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     // Edit Profile Dialog
     if (showEditProfileDialog) {
         EditProfileDialog(
             currentName = activeFarmerName,
             currentVillage = activeVillage,
             currentBirthYear = activeBirthYear,
-            currentPhone = activePhone,
             currentDistrict = currentAccount?.district ?: "Bengaluru Rural",
             currentCrops = currentAccount?.primaryCrops ?: "",
             currentAcres = currentAccount?.landSizeAcres ?: 0.0,
             onDismiss = { showEditProfileDialog = false },
-            onSave = { name, village, birthYear, phone, district, crops, acres ->
+            onSave = { name, village, birthYear, district, crops, acres ->
                 viewModel.saveOrAlterFarmerProfile(
                     name = name,
                     village = village,
                     birthYear = birthYear,
                     district = district,
                     crops = crops,
-                    acres = acres,
-                    phoneNumber = phone
+                    acres = acres
                 )
                 showEditProfileDialog = false
-            }
-        )
-    }
-
-    // Permanent Storage Proof Dialog
-    if (showStorageProofDialog) {
-        AlertDialog(
-            onDismissRequest = { showStorageProofDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Sync,
-                    contentDescription = null,
-                    tint = Color(0xFF2E7D32),
-                    modifier = Modifier.size(28.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ಸಾಧನದ ಶಾಶ್ವತ ಸಂಗ್ರಹ ಲೆಕ್ಕ"
-                        AppLanguage.HINDI -> "डिवाइस स्थायी भंडारण स्थिति"
-                        AppLanguage.ENGLISH -> "Persistent Storage Ledger"
-                    },
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Identity Key: $activeFarmerId",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = Color(0xFF1B5E20)
-                    )
-                    Text(
-                        text = "• Farmer Name: $activeFarmerName\n• Village: $activeVillage\n• Birth Year: $activeBirthYear\n• Phone: +91 $activePhone\n• Storage Backend: SharedPreferences + Room SQLite Database (raitha_drishti_v3.db) + Disk JSON file (farmer_account_backup.json)",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        color = Color(0xFFE8F5E9),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "✓ Zero Data Loss Guarantee: Data remains stored permanently until you explicitly alter it. Page refresh or app restarts do not erase any settings or diagnosis records.",
-                            fontSize = 11.sp,
-                            color = Color(0xFF1B5E20),
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showStorageProofDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Text("OK / ಅರ್ಥವಾಯಿತು")
-                }
             }
         )
     }
@@ -928,17 +580,15 @@ fun EditProfileDialog(
     currentName: String,
     currentVillage: String,
     currentBirthYear: Int,
-    currentPhone: String,
     currentDistrict: String,
     currentCrops: String,
     currentAcres: Double,
     onDismiss: () -> Unit,
-    onSave: (String, String, Int, String, String, String, Double) -> Unit
+    onSave: (String, String, Int, String, String, Double) -> Unit
 ) {
     var name by remember { mutableStateOf(currentName) }
     var village by remember { mutableStateOf(currentVillage) }
     var birthYearText by remember { mutableStateOf(if (currentBirthYear > 0) currentBirthYear.toString() else "") }
-    var phone by remember { mutableStateOf(currentPhone) }
     var district by remember { mutableStateOf(currentDistrict) }
     var crops by remember { mutableStateOf(currentCrops) }
     var acresText by remember { mutableStateOf(if (currentAcres > 0.0) currentAcres.toString() else "") }
@@ -963,16 +613,6 @@ fun EditProfileDialog(
                     onValueChange = { name = it },
                     label = { Text("Full Name (ರೈತರ ಹೆಸರು)") },
                     placeholder = { Text("Enter farmer name...") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("Mobile Number (ಮೊಬೈಲ್ ಸಂಖ್ಯೆ)") },
-                    placeholder = { Text("e.g. 9876543210") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1037,7 +677,7 @@ fun EditProfileDialog(
                         onClick = {
                             val acres = acresText.toDoubleOrNull() ?: 0.0
                             val year = birthYearText.toIntOrNull() ?: 0
-                            onSave(name.trim(), village.trim(), year, phone.trim(), district.trim(), crops.trim(), acres)
+                            onSave(name.trim(), village.trim(), year, district.trim(), crops.trim(), acres)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary)
                     ) {

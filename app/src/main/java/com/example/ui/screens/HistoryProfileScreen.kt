@@ -444,7 +444,7 @@ fun HistoryProfileScreen(
             currentName = activeFarmerName,
             currentVillage = activeVillage,
             currentBirthYear = activeBirthYear,
-            currentDistrict = currentAccount?.district ?: "Bengaluru Rural",
+            currentDistrict = currentAccount?.district ?: "Chikkamagaluru",
             currentCrops = currentAccount?.primaryCrops ?: "",
             currentAcres = currentAccount?.landSizeAcres ?: 0.0,
             onDismiss = { showEditProfileDialog = false },

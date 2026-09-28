@@ -35,10 +35,19 @@ import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingFlat
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.OfflineBolt
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -65,6 +74,9 @@ import com.example.ui.theme.MandiBengaluruColor
 import com.example.ui.theme.MandiChikkamagaluruColor
 import com.example.ui.theme.MandiMysuruColor
 import com.example.ui.viewmodel.RaithaDrishtiViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun MarketArbitrageScreen(
@@ -77,6 +89,12 @@ fun MarketArbitrageScreen(
     val weeklyAnalysis by viewModel.weeklyMarketAnalysis.collectAsState()
     val commodities = viewModel.supportedCommodities
 
+    val isMarketRefreshing by viewModel.isMarketRefreshing.collectAsState()
+    val isMarketFromRoomCache by viewModel.isMarketFromRoomCache.collectAsState()
+    val marketLastSyncedAt by viewModel.marketLastSyncedAt.collectAsState()
+    val marketSyncBannerMessage by viewModel.marketSyncBannerMessage.collectAsState()
+    val cachedCount by viewModel.cachedCommoditiesCount.collectAsState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -84,7 +102,7 @@ fun MarketArbitrageScreen(
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // 1. Prominent Today's Date & Live APMC Session Bar
+        // 1. Prominent Today's Date & Live APMC Session Bar with Room Cache Indicator
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -143,10 +161,10 @@ fun MarketArbitrageScreen(
                     }
                 }
 
-                // Live Market Indicator Pill
+                // Live Market or Room Cache Indicator Pill
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFF065F46),
+                    color = if (isMarketFromRoomCache) Color(0xFF78350F) else Color(0xFF065F46),
                     border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.AmberLight)
                 ) {
                     Row(
@@ -157,17 +175,248 @@ fun MarketArbitrageScreen(
                         Box(
                             modifier = Modifier
                                 .size(9.dp)
-                                .background(Color(0xFF34D399), CircleShape)
+                                .background(if (isMarketFromRoomCache) Color(0xFFFBBF24) else Color(0xFF34D399), CircleShape)
                         )
                         Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಲೈವ್ ಎಪಿಎಂಸಿ"
-                                AppLanguage.HINDI -> "लाइव मंडी"
-                                AppLanguage.ENGLISH -> "Live APMC"
+                            text = if (isMarketFromRoomCache) {
+                                when (currentLang) {
+                                    AppLanguage.KANNADA -> "ರೂಮ್ ಕ್ಯಾಶ್"
+                                    AppLanguage.HINDI -> "रूम कैश"
+                                    AppLanguage.ENGLISH -> "Room Cache"
+                                }
+                            } else {
+                                when (currentLang) {
+                                    AppLanguage.KANNADA -> "ಲೈವ್ ಎಪಿಎಂಸಿ"
+                                    AppLanguage.HINDI -> "लाइव मंडी"
+                                    AppLanguage.ENGLISH -> "Live APMC"
+                                }
                             },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+
+        // Dismissible Network Sync Notification / Slow Network Fallback Alert
+        if (marketSyncBannerMessage != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("market_sync_banner"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OfflineBolt,
+                            contentDescription = "Status",
+                            tint = Color(0xFFB45309),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = marketSyncBannerMessage ?: "",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                            color = Color(0xFF78350F)
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.dismissMarketSyncBanner() },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("dismiss_sync_banner_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss",
+                            tint = Color(0xFFB45309),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Dedicated Room Database Cache & Offline Status Bar
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("market_room_cache_card"),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(ForestGreenPrimary.copy(alpha = 0.12f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Storage,
+                                contentDescription = "Room Database",
+                                tint = ForestGreenPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ರೂಮ್ ಡೇಟಾಬೇಸ್ ಕ್ಯಾಶ್"
+                                        AppLanguage.HINDI -> "रूम डेटाबेस कैश (SQLite)"
+                                        AppLanguage.ENGLISH -> "Room Database Cache"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isMarketFromRoomCache) Color(0xFFFEF3C7) else Color(0xFFD1FAE5)
+                                ) {
+                                    Text(
+                                        text = if (isMarketFromRoomCache) {
+                                            when (currentLang) {
+                                                AppLanguage.KANNADA -> "ಸ್ಥಳೀಯ ಸಂಗ್ರಹ"
+                                                AppLanguage.HINDI -> "लोकल कैश"
+                                                AppLanguage.ENGLISH -> "Local SQLite"
+                                            }
+                                        } else {
+                                            when (currentLang) {
+                                                AppLanguage.KANNADA -> "ಲೈವ್ ಸಿಂಕ್"
+                                                AppLanguage.HINDI -> "लाइव सिंक"
+                                                AppLanguage.ENGLISH -> "Live Synced"
+                                            }
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isMarketFromRoomCache) Color(0xFFB45309) else Color(0xFF047857),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            val syncTimeStr = marketLastSyncedAt?.let {
+                                SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(it))
+                            } ?: "Active"
+                            Text(
+                                text = when (currentLang) {
+                                    AppLanguage.KANNADA -> "ಕೊನೆಯ ಸಿಂಕ್: $syncTimeStr • ತ್ವರಿತ ಆಫ್‌ಲೈನ್ ಲಭ್ಯತೆ"
+                                    AppLanguage.HINDI -> "अंतिम सिंक: $syncTimeStr • तुरंत लोड"
+                                    AppLanguage.ENGLISH -> "Last Synced: $syncTimeStr • Instant response"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Manual Refresh Button
+                    Button(
+                        onClick = { viewModel.refreshMarketData(selectedCommodity, isUserInitiated = true) },
+                        enabled = !isMarketRefreshing,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ForestGreenPrimary,
+                            disabledContainerColor = ForestGreenPrimary.copy(alpha = 0.6f)
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.testTag("market_refresh_button")
+                    ) {
+                        if (isMarketRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when (currentLang) {
+                                    AppLanguage.KANNADA -> "ಸಿಂಕ್..."
+                                    AppLanguage.HINDI -> "सिंक..."
+                                    AppLanguage.ENGLISH -> "Syncing..."
+                                },
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when (currentLang) {
+                                    AppLanguage.KANNADA -> "ದರ ನವೀಕರಿಸಿ"
+                                    AppLanguage.HINDI -> "भाव रीफ्रेश"
+                                    AppLanguage.ENGLISH -> "Refresh Rates"
+                                },
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                // Cache Resilience Info Bar
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OfflineBolt,
+                            contentDescription = "Offline ready",
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = when (currentLang) {
+                                AppLanguage.KANNADA -> "ಆಫ್‌ಲೈನ್ ಸಿದ್ಧ: ಎಲ್ಲ $cachedCount ಬೆಳೆಗಳ ದರಗಳು ಹಾಗೂ ೭-ದಿನಗಳ ವಿಶ್ಲೇಷಣೆ ಸ್ಥಳೀಯವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ."
+                                AppLanguage.HINDI -> "ऑफ़लाइन तैयार: सभी $cachedCount फसलों के भाव व 7-दिवसीय विश्लेषण स्थानीय रूप से सुरक्षित हैं।"
+                                AppLanguage.ENGLISH -> "Offline Ready: All $cachedCount commodities and 7-day analyses cached locally in Room DB."
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1088,12 +1337,18 @@ private fun MandiSnapshotCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "₹${mandi.modalPrice.toInt()}",
+                        text = "₹${mandi.modalPrice.toInt()}/Q",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 21.sp
+                            fontSize = 20.sp
                         ),
                         color = accentColor
+                    )
+                    Text(
+                        text = "≈ ₹${String.format("%.1f", mandi.modalPrice / 100)}/kg",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ForestGreenPrimary
                     )
                 }
 
@@ -1108,12 +1363,17 @@ private fun MandiSnapshotCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "₹${mandi.minPrice.toInt()}",
+                        text = "₹${mandi.minPrice.toInt()}/Q",
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.5.sp
+                            fontSize = 15.sp
                         ),
                         color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "₹${String.format("%.1f", mandi.minPrice / 100)}/kg",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -1128,12 +1388,17 @@ private fun MandiSnapshotCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "₹${mandi.maxPrice.toInt()}",
+                        text = "₹${mandi.maxPrice.toInt()}/Q",
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.5.sp
+                            fontSize = 15.sp
                         ),
                         color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "₹${String.format("%.1f", mandi.maxPrice / 100)}/kg",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

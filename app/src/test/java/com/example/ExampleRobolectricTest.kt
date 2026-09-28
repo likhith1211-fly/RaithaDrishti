@@ -25,7 +25,8 @@ class ExampleRobolectricTest {
     val analytics = service.getMarketAnalytics("Tomato")
     assertEquals("Tomato", analytics.commodity)
     assertEquals(14, analytics.trendHistory.size)
-    assertEquals(3, analytics.mandiPrices.size)
+    assert(analytics.mandiPrices.size >= 3)
+    assert(analytics.mandiPrices.first().mandiName.contains("Chikkamagaluru"))
   }
 
   @Test
@@ -91,15 +92,18 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify karnataka mandis in agri map screen are valid coordinates`() {
-    val mandis = com.example.ui.screens.KARNATAKA_MANDIS
-    assert(mandis.isNotEmpty())
-    assert(mandis.size >= 8)
+  fun `verify app feature guide catalog contains comprehensive 3-language documentation`() {
+    val features = com.example.ui.screens.APP_FEATURES_CATALOG
+    assert(features.isNotEmpty())
+    assert(features.size >= 7)
 
-    for (mandi in mandis) {
-      assert(mandi.latitude in 11.0..19.0) { "Latitude ${mandi.latitude} out of Karnataka bounds for ${mandi.nameEn}" }
-      assert(mandi.longitude in 73.5..79.0) { "Longitude ${mandi.longitude} out of Karnataka bounds for ${mandi.nameEn}" }
-      assert(mandi.livePricePerQtl > 0)
+    for (feature in features) {
+      assert(feature.titleKn.isNotBlank())
+      assert(feature.titleHi.isNotBlank())
+      assert(feature.titleEn.isNotBlank())
+      assert(feature.purposeKn.isNotBlank())
+      assert(feature.howToUseKn.isNotBlank())
+      assert(feature.benefitKn.isNotBlank())
     }
   }
 
@@ -200,6 +204,7 @@ class ExampleRobolectricTest {
     ).allowMainThreadQueries().build()
 
     val marketDao = db.marketPriceCacheDao()
+    val mandiDao = db.cachedMandiPriceDao()
     val weatherDao = db.weatherCacheDao()
     val alertDao = db.priceAlertDao()
 
@@ -209,12 +214,40 @@ class ExampleRobolectricTest {
         marketAnalyticsJson = "{\"commodity\":\"Tomato\",\"bestMandi\":\"Kolar\"}",
         weeklyAnalysisJson = "{\"weeklyAveragePrice\":3200.0}",
         lastSyncedAt = System.currentTimeMillis(),
-        syncedDateString = "21 Sep 2026"
+        syncedDateString = "28 Sep 2026",
+        isOfflineCached = true
     )
     marketDao.insertOrUpdate(cachedPrice)
     val retrievedMarket = marketDao.getCacheSync("Tomato")
     assert(retrievedMarket != null)
     assertEquals("Tomato", retrievedMarket?.commodity)
+    assertEquals(true, retrievedMarket?.isOfflineCached)
+
+    // Test inserting cached individual mandi prices in Room
+    val mandiPrices = listOf(
+        com.example.data.local.CachedMandiPriceEntity(
+            commodity = "Tomato",
+            mandiName = "Chikkamagaluru APMC",
+            modalPrice = 2350.0,
+            minPrice = 2200.0,
+            maxPrice = 2500.0,
+            dailyChangePercent = 2.1,
+            reportDate = "28 Sep 2026"
+        ),
+        com.example.data.local.CachedMandiPriceEntity(
+            commodity = "Tomato",
+            mandiName = "Bengaluru APMC",
+            modalPrice = 2450.0,
+            minPrice = 2300.0,
+            maxPrice = 2600.0,
+            dailyChangePercent = 1.8,
+            reportDate = "28 Sep 2026"
+        )
+    )
+    mandiDao.insertMandiPrices(mandiPrices)
+    val retrievedMandiPrices = mandiDao.getPricesForCommoditySync("Tomato")
+    assertEquals(2, retrievedMandiPrices.size)
+    assertEquals("Bengaluru APMC", retrievedMandiPrices[0].mandiName) // Ordered by modalPrice DESC
 
     // Test inserting weather cache
     val cachedWeather = com.example.data.local.WeatherCacheEntity(

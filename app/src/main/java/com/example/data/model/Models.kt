@@ -2,6 +2,47 @@ package com.example.data.model
 
 import androidx.compose.ui.graphics.Color
 
+data class VerifiedFertilizerItem(
+    val fertilizerName: String,             // e.g. "Zinc Sulphate Heptahydrate 21% (IFFCO / Mahadhan)"
+    val localBrandAvailability: String,     // e.g. "Widely available at all local Karnataka Raitha Seva Kendras / APMC agro-dealers (₹45-55/kg)"
+    val targetNutrient: String,             // e.g. "Zinc (Zn 21%) & Sulphur (S 10%)"
+    val dosagePerLiter: Double,             // e.g. 5.0
+    val dosageUnit: String,                 // "g/L" or "ml/L"
+    val standardDosePerAcreKgOrL: Double,   // e.g. 1.0 kg/acre
+    val waterPerAcreLiters: Int = 200,      // standard 200L / acre
+    val mixingInstructions: String,         // Step-by-step mixing directions
+    val precaution: String                  // Safety, timing, and compatibility warning
+) {
+    fun calculateQuantityForLand(acres: Double, lang: AppLanguage = AppLanguage.KANNADA): String {
+        val safeAcres = if (acres <= 0.0) 1.0 else acres
+        val totalAmount = standardDosePerAcreKgOrL * safeAcres
+        val totalWater = (waterPerAcreLiters * safeAcres).toInt()
+        val totalSprayers = Math.max(1, Math.round(totalWater / 16.0).toInt())
+        val unit = if (dosageUnit.startsWith("g")) "kg" else "L"
+        return when (lang) {
+            AppLanguage.KANNADA -> "ನಿಮ್ಮ %.1f ಎಕರೆ ಜಮೀನಿಗೆ: %.2f %s ಗೊಬ್ಬರವನ್ನು %d ಲೀಟರ್ ನೀರಿನಲ್ಲಿ ಮಿಶ್ರಣ ಮಾಡಿ (ಸುಮಾರು %d ಪಂಪ್ ಸ್ಪ್ರೇಯರ್ - 16L)".format(
+                safeAcres, totalAmount, unit, totalWater, totalSprayers
+            )
+            AppLanguage.HINDI -> "आपकी %.1f एकड़ जमीन के लिए: %.2f %s खाद को %d लीटर पानी में घोलें (लगभग %d नैपसैक पंप - 16L)".format(
+                safeAcres, totalAmount, unit, totalWater, totalSprayers
+            )
+            AppLanguage.ENGLISH -> "For your %.1f Acres: %.2f %s mixed in %d Liters of water (approx %d knapsack sprayers of 16L)".format(
+                safeAcres, totalAmount, unit, totalWater, totalSprayers
+            )
+        }
+    }
+
+    fun calculateTankDose(lang: AppLanguage = AppLanguage.KANNADA): String {
+        val tankDose = dosagePerLiter * 16.0
+        val unit = if (dosageUnit.startsWith("g")) "g" else "ml"
+        return when (lang) {
+            AppLanguage.KANNADA -> "೧೬ ಲೀಟರ್ ಸ್ಪ್ರೇ ಪಂಪ್‌ಗೆ: %.0f %s".format(tankDose, unit)
+            AppLanguage.HINDI -> "16 लीटर स्प्रे पंप के लिए: %.0f %s".format(tankDose, unit)
+            AppLanguage.ENGLISH -> "Per 16L Knapsack Sprayer: %.0f %s".format(tankDose, unit)
+        }
+    }
+}
+
 data class CropDiagnosisResult(
     val diagnosis: String,
     val severity: String, // "Low", "Moderate", "High", "Severe"
@@ -14,6 +55,9 @@ data class CropDiagnosisResult(
     val chemicalFertilizers: List<String>,
     val safety: List<String>,
     val cropName: String = "",
+    val exactProblemIdentified: String = "",
+    val stepByStepActionPlan: List<String> = emptyList(),
+    val verifiedLocalMarketFertilizers: List<VerifiedFertilizerItem> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
 ) {
     fun getSeverityColor(): Color {

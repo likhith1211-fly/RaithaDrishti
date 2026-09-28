@@ -51,6 +51,7 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
             profileDao = db.profileDao(),
             farmerAccountDao = db.farmerAccountDao(),
             marketPriceCacheDao = db.marketPriceCacheDao(),
+            cachedMandiPriceDao = db.cachedMandiPriceDao(),
             weatherCacheDao = db.weatherCacheDao(),
             priceAlertDao = db.priceAlertDao(),
             weatherService = WeatherApiService(),
@@ -139,7 +140,7 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
     )
     val farmerCoordinates: StateFlow<Pair<Double, Double>> = _farmerCoordinates.asStateFlow()
 
-    private val _selectedMapMandiId = MutableStateFlow<String?>("bengaluru_apmc")
+    private val _selectedMapMandiId = MutableStateFlow<String?>("chikkamagaluru_apmc")
     val selectedMapMandiId: StateFlow<String?> = _selectedMapMandiId.asStateFlow()
 
     private val _mapLayer = MutableStateFlow("MANDI_NETWORK")
@@ -167,18 +168,34 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
     private val _isGeneratingAdvisory = MutableStateFlow(false)
     val isGeneratingAdvisory: StateFlow<Boolean> = _isGeneratingAdvisory.asStateFlow()
 
-    // --- Mandi Market State ---
+    // --- Mandi Market State & Room Database Caching ---
     private val defaultMarketService = ApmcKarnatakaMarketService()
-    private val _selectedCommodity = MutableStateFlow("Tomato")
+    private val _selectedCommodity = MutableStateFlow("Coffee (Arabica Parchment)")
     val selectedCommodity: StateFlow<String> = _selectedCommodity.asStateFlow()
 
-    private val _marketAnalytics = MutableStateFlow(defaultMarketService.getMarketAnalytics("Tomato"))
+    private val _marketAnalytics = MutableStateFlow(defaultMarketService.getMarketAnalytics("Coffee (Arabica Parchment)"))
     val marketAnalytics: StateFlow<MarketAnalytics> = _marketAnalytics.asStateFlow()
 
-    private val _weeklyMarketAnalysis = MutableStateFlow(defaultMarketService.getWeeklyMarketAnalysis("Tomato"))
+    private val _weeklyMarketAnalysis = MutableStateFlow(defaultMarketService.getWeeklyMarketAnalysis("Coffee (Arabica Parchment)"))
     val weeklyMarketAnalysis: StateFlow<WeeklyMarketAnalysis> = _weeklyMarketAnalysis.asStateFlow()
 
     val supportedCommodities: List<String> = defaultMarketService.getSupportedCommodities()
+
+    // Room Database Market Caching & Offline Status
+    private val _isMarketRefreshing = MutableStateFlow(false)
+    val isMarketRefreshing: StateFlow<Boolean> = _isMarketRefreshing.asStateFlow()
+
+    private val _isMarketFromRoomCache = MutableStateFlow(true)
+    val isMarketFromRoomCache: StateFlow<Boolean> = _isMarketFromRoomCache.asStateFlow()
+
+    private val _marketLastSyncedAt = MutableStateFlow<Long?>(null)
+    val marketLastSyncedAt: StateFlow<Long?> = _marketLastSyncedAt.asStateFlow()
+
+    private val _marketSyncBannerMessage = MutableStateFlow<String?>(null)
+    val marketSyncBannerMessage: StateFlow<String?> = _marketSyncBannerMessage.asStateFlow()
+
+    val cachedCommoditiesCount: StateFlow<Int> = repository.cachedCommoditiesCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 22)
 
     // --- Price Threshold Alerts ---
     val allPriceAlerts: StateFlow<List<PriceAlertEntity>> = repository.allPriceAlerts
@@ -250,6 +267,24 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
 
     init {
         fetchWeatherForDistrict(_selectedDistrict.value)
+
+        // Seed Room database cache with all supported commodities on startup & load instant cache
+        viewModelScope.launch {
+            repository.seedAllMarketPricesIfEmpty()
+            val cachedAnalytics = repository.getCachedMarketAnalytics(_selectedCommodity.value)
+            val cachedWeekly = repository.getCachedWeeklyAnalysis(_selectedCommodity.value)
+            val lastSync = repository.getLastPriceSyncTime(_selectedCommodity.value)
+            if (cachedAnalytics != null) {
+                _marketAnalytics.value = cachedAnalytics
+                evaluatePriceAlerts(cachedAnalytics)
+            }
+            if (cachedWeekly != null) {
+                _weeklyMarketAnalysis.value = cachedWeekly
+            }
+            _marketLastSyncedAt.value = lastSync ?: System.currentTimeMillis()
+            _isMarketFromRoomCache.value = true
+        }
+
         // Only write to Room DB if farmer has actually entered their details
         if (savedInitialFarmer.fullName.isNotBlank() || savedInitialFarmer.phoneNumber.isNotBlank()) {
             viewModelScope.launch {
@@ -290,12 +325,12 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
         name: String,
         village: String,
         birthYear: Int,
-        district: String = "Bengaluru Rural",
+        district: String = "Chikkamagaluru",
         crops: String = "",
         acres: Double = 0.0,
         phoneNumber: String = "",
-        lat: Double = 13.098,
-        lon: Double = 77.391
+        lat: Double = 13.3161,
+        lon: Double = 75.7720
     ) {
         val sanitizedName = name.trim()
         val sanitizedVillage = village.trim()
@@ -583,12 +618,66 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
     fun setCommodity(commodity: String) {
         _selectedCommodity.value = commodity
         viewModelScope.launch {
-            val analytics = repository.getMarketAnalytics(commodity)
-            val weekly = repository.getWeeklyMarketAnalysis(commodity)
-            _marketAnalytics.value = analytics
-            _weeklyMarketAnalysis.value = weekly
-            evaluatePriceAlerts(analytics)
+            // 1. Instant response from local Room database cache (sub-millisecond responsive)
+            val cachedAnalytics = repository.getCachedMarketAnalytics(commodity)
+            val cachedWeekly = repository.getCachedWeeklyAnalysis(commodity)
+            val lastSync = repository.getLastPriceSyncTime(commodity)
+            if (cachedAnalytics != null) {
+                _marketAnalytics.value = cachedAnalytics
+                _isMarketFromRoomCache.value = true
+                evaluatePriceAlerts(cachedAnalytics)
+            }
+            if (cachedWeekly != null) {
+                _weeklyMarketAnalysis.value = cachedWeekly
+            }
+            _marketLastSyncedAt.value = lastSync ?: System.currentTimeMillis()
+
+            // 2. Seamlessly sync in background without blocking UI
+            refreshMarketData(commodity, isUserInitiated = false)
         }
+    }
+
+    fun refreshMarketData(commodity: String = _selectedCommodity.value, isUserInitiated: Boolean = true) {
+        viewModelScope.launch {
+            _isMarketRefreshing.value = true
+            try {
+                val result = repository.refreshMarketPriceData(commodity)
+                result.onSuccess { live ->
+                    _marketAnalytics.value = live
+                    val weekly = repository.getCachedWeeklyAnalysis(commodity)
+                    if (weekly != null) {
+                        _weeklyMarketAnalysis.value = weekly
+                    }
+                    _isMarketFromRoomCache.value = false
+                    _marketLastSyncedAt.value = System.currentTimeMillis()
+                    evaluatePriceAlerts(live)
+                    if (isUserInitiated) {
+                        _marketSyncBannerMessage.value = when (_currentLanguage.value) {
+                            AppLanguage.KANNADA -> "ಎಪಿಎಂಸಿ ದರಗಳು ಲೈವ್ ನವೀಕರಣಗೊಂಡಿವೆ ಮತ್ತು ರೂಮ್ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ."
+                            AppLanguage.HINDI -> "एपीएमसी भाव सफलतापूर्वक लाइव अपडेट हुए और रूम डेटाबेस में सुरक्षित किए गए।"
+                            AppLanguage.ENGLISH -> "APMC market rates synced live and saved to Room database."
+                        }
+                    }
+                }.onFailure {
+                    _isMarketFromRoomCache.value = true
+                    if (isUserInitiated) {
+                        _marketSyncBannerMessage.value = when (_currentLanguage.value) {
+                            AppLanguage.KANNADA -> "ನೆಟ್‌ವರ್ಕ್ ನಿಧಾನವಾಗಿದೆ. ಸ್ಥಳೀಯ ರೂಮ್ ಡೇಟಾಬೇಸ್‌ನಿಂದ ಬೆಲೆಗಳನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ."
+                            AppLanguage.HINDI -> "नेटवर्क धीमा है। स्थानीय रूम डेटाबेस से भाव दिखाए जा रहे हैं।"
+                            AppLanguage.ENGLISH -> "Network slow or offline. Displaying cached prices from local Room database."
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _isMarketFromRoomCache.value = true
+            } finally {
+                _isMarketRefreshing.value = false
+            }
+        }
+    }
+
+    fun dismissMarketSyncBanner() {
+        _marketSyncBannerMessage.value = null
     }
 
     private fun evaluatePriceAlerts(analytics: MarketAnalytics) {

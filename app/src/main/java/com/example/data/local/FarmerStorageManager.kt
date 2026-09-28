@@ -80,22 +80,22 @@ class FarmerStorageManager(private val context: Context) {
                     village = "",
                     birthYear = 0,
                     phoneNumber = "",
-                    district = "Bengaluru Rural",
+                    district = "Chikkamagaluru",
                     primaryCrops = "",
                     landSizeAcres = 0.0,
-                    latitude = 13.098,
-                    longitude = 77.391,
+                    latitude = 13.3161,
+                    longitude = 75.7720,
                     language = AppLanguage.KANNADA
                 )
             }
 
             val farmerId = prefs.getString(KEY_FARMER_ID, if (name.isNotBlank()) generateFarmerId(name, village, birthYear) else "")
                 ?: (if (name.isNotBlank()) generateFarmerId(name, village, birthYear) else "")
-            val district = prefs.getString(KEY_DISTRICT, "Bengaluru Rural") ?: "Bengaluru Rural"
+            val district = prefs.getString(KEY_DISTRICT, "Chikkamagaluru") ?: "Chikkamagaluru"
             val crops = prefs.getString(KEY_CROPS, "") ?: ""
             val acres = prefs.getFloat(KEY_ACRES, 0f).toDouble()
-            val lat = prefs.getFloat(KEY_LATITUDE, 13.098f).toDouble()
-            val lon = prefs.getFloat(KEY_LONGITUDE, 77.391f).toDouble()
+            val lat = prefs.getFloat(KEY_LATITUDE, 13.3161f).toDouble()
+            val lon = prefs.getFloat(KEY_LONGITUDE, 75.7720f).toDouble()
             val langName = prefs.getString(KEY_LANGUAGE, AppLanguage.KANNADA.name) ?: AppLanguage.KANNADA.name
             val lang = try { AppLanguage.valueOf(langName) } catch (e: Exception) { AppLanguage.KANNADA }
 
@@ -133,21 +133,21 @@ class FarmerStorageManager(private val context: Context) {
                         village = "",
                         birthYear = 0,
                         phoneNumber = "",
-                        district = "Bengaluru Rural",
+                        district = "Chikkamagaluru",
                         primaryCrops = "",
                         landSizeAcres = 0.0,
-                        latitude = 13.098,
-                        longitude = 77.391,
+                        latitude = 13.3161,
+                        longitude = 75.7720,
                         language = AppLanguage.KANNADA
                     )
                 }
 
                 val farmerId = obj.optString("farmerId", if (name.isNotBlank()) generateFarmerId(name, village, birthYear) else "")
-                val district = obj.optString("district", "Bengaluru Rural")
+                val district = obj.optString("district", "Chikkamagaluru")
                 val crops = obj.optString("primaryCrops", "")
                 val acres = obj.optDouble("landSizeAcres", 0.0)
-                val lat = obj.optDouble("latitude", 13.098)
-                val lon = obj.optDouble("longitude", 77.391)
+                val lat = obj.optDouble("latitude", 13.3161)
+                val lon = obj.optDouble("longitude", 75.7720)
                 val langStr = obj.optString("language", AppLanguage.KANNADA.name)
                 val lang = try { AppLanguage.valueOf(langStr) } catch (e: Exception) { AppLanguage.KANNADA }
 
@@ -179,11 +179,11 @@ class FarmerStorageManager(private val context: Context) {
             village = "",
             birthYear = 0,
             phoneNumber = "",
-            district = "Bengaluru Rural",
+            district = "Chikkamagaluru",
             primaryCrops = "",
             landSizeAcres = 0.0,
-            latitude = 13.098,
-            longitude = 77.391,
+            latitude = 13.3161,
+            longitude = 75.7720,
             language = AppLanguage.KANNADA
         )
     }
@@ -193,11 +193,11 @@ class FarmerStorageManager(private val context: Context) {
         village: String,
         birthYear: Int,
         phone: String = "",
-        district: String = "Bengaluru Rural",
+        district: String = "Chikkamagaluru",
         crops: String = "",
         acres: Double = 0.0,
-        lat: Double = 13.098,
-        lon: Double = 77.391,
+        lat: Double = 13.3161,
+        lon: Double = 75.7720,
         language: AppLanguage = AppLanguage.KANNADA
     ): SavedFarmerData {
         val farmerId = generateFarmerId(name, village, birthYear)

@@ -12,9 +12,10 @@ import androidx.room.RoomDatabase
         FarmerAccountEntity::class,
         MarketPriceCacheEntity::class,
         WeatherCacheEntity::class,
-        PriceAlertEntity::class
+        PriceAlertEntity::class,
+        CachedMandiPriceEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -22,6 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun farmerAccountDao(): FarmerAccountDao
     abstract fun marketPriceCacheDao(): MarketPriceCacheDao
+    abstract fun cachedMandiPriceDao(): CachedMandiPriceDao
     abstract fun weatherCacheDao(): WeatherCacheDao
     abstract fun priceAlertDao(): PriceAlertDao
 

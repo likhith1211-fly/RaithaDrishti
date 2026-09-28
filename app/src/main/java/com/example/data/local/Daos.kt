@@ -68,14 +68,47 @@ interface MarketPriceCacheDao {
     @Query("SELECT * FROM market_price_cache WHERE commodity = :commodity LIMIT 1")
     suspend fun getCacheSync(commodity: String): MarketPriceCacheEntity?
 
-    @Query("SELECT * FROM market_price_cache")
+    @Query("SELECT * FROM market_price_cache ORDER BY lastSyncedAt DESC")
     fun getAllCache(): Flow<List<MarketPriceCacheEntity>>
+
+    @Query("SELECT * FROM market_price_cache ORDER BY lastSyncedAt DESC")
+    suspend fun getAllCacheSync(): List<MarketPriceCacheEntity>
+
+    @Query("SELECT COUNT(*) FROM market_price_cache")
+    fun getCacheCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM market_price_cache")
+    suspend fun getCacheCountSync(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(cache: MarketPriceCacheEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(caches: List<MarketPriceCacheEntity>)
+
+    @Query("DELETE FROM market_price_cache WHERE commodity = :commodity")
+    suspend fun deleteCache(commodity: String)
+
     @Query("DELETE FROM market_price_cache")
     suspend fun clearAllCache()
+}
+
+@Dao
+interface CachedMandiPriceDao {
+    @Query("SELECT * FROM cached_mandi_prices WHERE commodity = :commodity ORDER BY modalPrice DESC")
+    fun getPricesForCommodity(commodity: String): Flow<List<CachedMandiPriceEntity>>
+
+    @Query("SELECT * FROM cached_mandi_prices WHERE commodity = :commodity ORDER BY modalPrice DESC")
+    suspend fun getPricesForCommoditySync(commodity: String): List<CachedMandiPriceEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMandiPrices(prices: List<CachedMandiPriceEntity>)
+
+    @Query("DELETE FROM cached_mandi_prices WHERE commodity = :commodity")
+    suspend fun deletePricesForCommodity(commodity: String)
+
+    @Query("DELETE FROM cached_mandi_prices")
+    suspend fun clearAll()
 }
 
 @Dao

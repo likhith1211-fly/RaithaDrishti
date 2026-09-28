@@ -2,6 +2,8 @@ package com.example.data.repository
 
 import android.graphics.Bitmap
 import com.example.data.local.CacheConverter
+import com.example.data.local.CachedMandiPriceDao
+import com.example.data.local.CachedMandiPriceEntity
 import com.example.data.local.DiagnosisDao
 import com.example.data.local.DiagnosisEntity
 import com.example.data.local.FarmerAccountDao
@@ -30,6 +32,7 @@ class RaithaDrishtiRepository(
     private val profileDao: ProfileDao,
     private val farmerAccountDao: FarmerAccountDao,
     private val marketPriceCacheDao: MarketPriceCacheDao,
+    private val cachedMandiPriceDao: CachedMandiPriceDao,
     private val weatherCacheDao: WeatherCacheDao,
     private val priceAlertDao: PriceAlertDao,
     private val weatherService: WeatherApiService,
@@ -41,6 +44,15 @@ class RaithaDrishtiRepository(
     val farmerProfile: Flow<ProfileEntity?> = profileDao.getProfile()
     val allFarmerAccounts: Flow<List<FarmerAccountEntity>> = farmerAccountDao.getAllAccounts()
     val allPriceAlerts: Flow<List<PriceAlertEntity>> = priceAlertDao.getAllAlerts()
+    val cachedCommoditiesCount: Flow<Int> = marketPriceCacheDao.getCacheCount()
+
+    fun observeMarketCache(commodity: String): Flow<MarketPriceCacheEntity?> {
+        return marketPriceCacheDao.getCache(commodity)
+    }
+
+    fun observeMandiPrices(commodity: String): Flow<List<CachedMandiPriceEntity>> {
+        return cachedMandiPriceDao.getPricesForCommodity(commodity)
+    }
 
     fun getDiagnosesForFarmerId(farmerId: String): Flow<List<DiagnosisEntity>> {
         return diagnosisDao.getDiagnosesForFarmerId(farmerId)
@@ -195,31 +207,139 @@ class RaithaDrishtiRepository(
     }
 
     // --- Market Analytics with Room Offline Caching ---
-    suspend fun getMarketAnalytics(commodity: String): MarketAnalytics {
+
+    suspend fun seedAllMarketPricesIfEmpty() {
+        try {
+            val count = marketPriceCacheDao.getCacheCountSync()
+            if (count == 0) {
+                val commodities = marketService.getSupportedCommodities()
+                val cacheEntities = mutableListOf<MarketPriceCacheEntity>()
+                val mandiEntities = mutableListOf<CachedMandiPriceEntity>()
+
+                for (commodity in commodities) {
+                    val analytics = marketService.getMarketAnalytics(commodity)
+                    val weekly = marketService.getWeeklyMarketAnalysis(commodity)
+                    cacheEntities.add(
+                        MarketPriceCacheEntity(
+                            commodity = commodity,
+                            marketAnalyticsJson = CacheConverter.marketAnalyticsToJson(analytics),
+                            weeklyAnalysisJson = CacheConverter.weeklyAnalysisToJson(weekly),
+                            lastSyncedAt = System.currentTimeMillis(),
+                            syncedDateString = weekly.reportDate,
+                            isOfflineCached = true,
+                            sourceMandi = "APMC Karnataka"
+                        )
+                    )
+                    for (mandi in analytics.mandiPrices) {
+                        mandiEntities.add(
+                            CachedMandiPriceEntity(
+                                commodity = commodity,
+                                mandiName = mandi.mandiName,
+                                modalPrice = mandi.modalPrice,
+                                minPrice = mandi.minPrice,
+                                maxPrice = mandi.maxPrice,
+                                dailyChangePercent = mandi.dailyChangePercent,
+                                reportDate = weekly.reportDate,
+                                cachedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+                marketPriceCacheDao.insertAll(cacheEntities)
+                cachedMandiPriceDao.insertMandiPrices(mandiEntities)
+            }
+        } catch (e: Exception) {
+            // Seeding exception caught safely
+        }
+    }
+
+    suspend fun getCachedMarketAnalytics(commodity: String): MarketAnalytics? {
+        val cached = marketPriceCacheDao.getCacheSync(commodity)
+        return cached?.let { CacheConverter.marketAnalyticsFromJson(it.marketAnalyticsJson) }
+    }
+
+    suspend fun getCachedWeeklyAnalysis(commodity: String): WeeklyMarketAnalysis? {
+        val cached = marketPriceCacheDao.getCacheSync(commodity)
+        return cached?.let { CacheConverter.weeklyAnalysisFromJson(it.weeklyAnalysisJson) }
+    }
+
+    suspend fun refreshMarketPriceData(commodity: String): Result<MarketAnalytics> {
         return try {
             val live = marketService.getMarketAnalytics(commodity)
             val weekly = marketService.getWeeklyMarketAnalysis(commodity)
+
+            // Cache aggregate data to Room DB
             marketPriceCacheDao.insertOrUpdate(
                 MarketPriceCacheEntity(
                     commodity = commodity,
                     marketAnalyticsJson = CacheConverter.marketAnalyticsToJson(live),
                     weeklyAnalysisJson = CacheConverter.weeklyAnalysisToJson(weekly),
                     lastSyncedAt = System.currentTimeMillis(),
-                    syncedDateString = weekly.reportDate
+                    syncedDateString = weekly.reportDate,
+                    isOfflineCached = false,
+                    sourceMandi = "APMC Karnataka"
                 )
             )
-            live
+
+            // Cache individual mandi records to Room DB
+            cachedMandiPriceDao.deletePricesForCommodity(commodity)
+            val mandiEntities = live.mandiPrices.map { mandi ->
+                CachedMandiPriceEntity(
+                    commodity = commodity,
+                    mandiName = mandi.mandiName,
+                    modalPrice = mandi.modalPrice,
+                    minPrice = mandi.minPrice,
+                    maxPrice = mandi.maxPrice,
+                    dailyChangePercent = mandi.dailyChangePercent,
+                    reportDate = weekly.reportDate,
+                    cachedAt = System.currentTimeMillis()
+                )
+            }
+            cachedMandiPriceDao.insertMandiPrices(mandiEntities)
+
+            Result.success(live)
         } catch (e: Exception) {
-            val cached = marketPriceCacheDao.getCacheSync(commodity)
+            val cached = getCachedMarketAnalytics(commodity)
             if (cached != null) {
-                CacheConverter.marketAnalyticsFromJson(cached.marketAnalyticsJson) ?: marketService.getMarketAnalytics(commodity)
+                Result.failure(e)
             } else {
-                marketService.getMarketAnalytics(commodity)
+                val fallback = marketService.getMarketAnalytics(commodity)
+                Result.success(fallback)
             }
         }
     }
 
+    suspend fun getMarketAnalytics(commodity: String): MarketAnalytics {
+        // Cache-first: try reading from Room DB first for instant response
+        val cached = getCachedMarketAnalytics(commodity)
+        if (cached != null) {
+            return cached
+        }
+        // If not cached, fetch and populate Room
+        return try {
+            val live = marketService.getMarketAnalytics(commodity)
+            val weekly = marketService.getWeeklyMarketAnalysis(commodity)
+            marketPriceCacheDao.insertOrUpdate(
+                MarketPriceCacheEntity(
+                    commodity = commodity,
+                    marketAnalyticsJson = CacheConverter.marketAnalyticsToJson(live),
+                    weeklyAnalysisJson = CacheConverter.weeklyAnalysisToJson(weekly),
+                    lastSyncedAt = System.currentTimeMillis(),
+                    syncedDateString = weekly.reportDate,
+                    isOfflineCached = false
+                )
+            )
+            live
+        } catch (e: Exception) {
+            marketService.getMarketAnalytics(commodity)
+        }
+    }
+
     suspend fun getWeeklyMarketAnalysis(commodity: String): WeeklyMarketAnalysis {
+        val cached = getCachedWeeklyAnalysis(commodity)
+        if (cached != null) {
+            return cached
+        }
         return try {
             val weekly = marketService.getWeeklyMarketAnalysis(commodity)
             val live = marketService.getMarketAnalytics(commodity)
@@ -229,17 +349,13 @@ class RaithaDrishtiRepository(
                     marketAnalyticsJson = CacheConverter.marketAnalyticsToJson(live),
                     weeklyAnalysisJson = CacheConverter.weeklyAnalysisToJson(weekly),
                     lastSyncedAt = System.currentTimeMillis(),
-                    syncedDateString = weekly.reportDate
+                    syncedDateString = weekly.reportDate,
+                    isOfflineCached = false
                 )
             )
             weekly
         } catch (e: Exception) {
-            val cached = marketPriceCacheDao.getCacheSync(commodity)
-            if (cached != null) {
-                CacheConverter.weeklyAnalysisFromJson(cached.weeklyAnalysisJson) ?: marketService.getWeeklyMarketAnalysis(commodity)
-            } else {
-                marketService.getWeeklyMarketAnalysis(commodity)
-            }
+            marketService.getWeeklyMarketAnalysis(commodity)
         }
     }
 

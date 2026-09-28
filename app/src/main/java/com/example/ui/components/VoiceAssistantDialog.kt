@@ -308,6 +308,7 @@ fun VoiceAssistantBottomSheet(
             // Quick Farmer Query Suggestions
             val quickQuestions = when (currentLang) {
                 AppLanguage.KANNADA -> listOf(
+                    "ಚಿಕ್ಕಮಗಳೂರು ಕಾಫಿ & ಅಡಿಕೆ ದರ ಎಷ್ಟು?",
                     "ಚಿಕ್ಕಮಗಳೂರಿನಲ್ಲಿ ಕುಂಬಳಕಾಯಿ ಬೆಲೆ ಎಷ್ಟು?",
                     "ಮೆಕ್ಕೆಜೋಳದ ಬಿಳಿ ಎಲೆಗೆ ಔಷಧಿ ಏನು?",
                     "ಬೆಳೆ ವೇಗವಾಗಿ ಬೆಳೆಯಲು ಯಾವ ಗೊಬ್ಬರ?",
@@ -315,6 +316,7 @@ fun VoiceAssistantBottomSheet(
                     "ಇಂದಿನ ಟೊಮೆಟೊ ಮಾರುಕಟ್ಟೆ ದರ ಎಷ್ಟು?"
                 )
                 AppLanguage.HINDI -> listOf(
+                    "चिकमगलूर में कॉफी और सुपारी का भाव?",
                     "चिकमगलूर में कद्दू का क्या भाव है?",
                     "मक्के की सफेद पत्ती का क्या इलाज है?",
                     "फसल तेज बढ़ाने के लिए कौन सी खाद दें?",
@@ -322,7 +324,8 @@ fun VoiceAssistantBottomSheet(
                     "टमाटर का सबसे बढ़िया मंडी भाव क्या है?"
                 )
                 AppLanguage.ENGLISH -> listOf(
-                    "What is pumpkin price in Chikmagalur?",
+                    "Chikkamagaluru coffee & arecanut rates?",
+                    "What is pumpkin price in Chikkamagaluru?",
                     "How to cure patchy white leaves in maize?",
                     "Which fertilizer gives fast growth boost?",
                     "Can I spray pesticide in today's weather?",

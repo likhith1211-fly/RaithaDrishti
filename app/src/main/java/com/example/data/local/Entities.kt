@@ -114,12 +114,12 @@ data class FarmerAccountEntity(
     val village: String,
     val birthYear: Int,
     val phoneNumber: String = "",
-    val district: String = "Bengaluru Rural",
+    val district: String = "Chikkamagaluru",
     val state: String = "Karnataka",
-    val primaryCrops: String = "Maize, Tomato, Arecanut",
+    val primaryCrops: String = "Coffee, Arecanut, Vegetables",
     val landSizeAcres: Double = 4.0,
-    val latitude: Double = 13.098,
-    val longitude: Double = 77.391,
+    val latitude: Double = 13.3161,
+    val longitude: Double = 75.7720,
     val lastSignedIn: Long = System.currentTimeMillis()
 )
 
@@ -131,7 +131,7 @@ data class ProfileEntity(
     val village: String = "",
     val birthYear: Int = 0,
     val email: String = "",
-    val district: String = "Bengaluru Rural",
+    val district: String = "Chikkamagaluru",
     val state: String = "Karnataka",
     val primaryCrops: String = "",
     val landSizeAcres: Double = 0.0
@@ -144,7 +144,23 @@ data class MarketPriceCacheEntity(
     val marketAnalyticsJson: String,
     val weeklyAnalysisJson: String,
     val lastSyncedAt: Long = System.currentTimeMillis(),
-    val syncedDateString: String = ""
+    val syncedDateString: String = "",
+    val isOfflineCached: Boolean = false,
+    val sourceMandi: String = "APMC Karnataka"
+)
+
+@Entity(tableName = "cached_mandi_prices")
+data class CachedMandiPriceEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val commodity: String,
+    val mandiName: String,
+    val modalPrice: Double,
+    val minPrice: Double,
+    val maxPrice: Double,
+    val dailyChangePercent: Double,
+    val reportDate: String,
+    val cachedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "weather_cache")

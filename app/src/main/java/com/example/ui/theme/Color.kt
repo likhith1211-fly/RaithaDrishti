@@ -2,16 +2,30 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Royal Agricultural Palette (Imperial Emerald, Sovereign Gold, Alabaster)
-val ForestGreenPrimary = Color(0xFF0D472B)   // Deep Royal Imperial Emerald
-val ForestGreenLight = Color(0xFF228B58)     // Luminous Royal Emerald
-val ForestGreenDark = Color(0xFF062315)      // Regal Midnight Obsidian Emerald
+// Royal Agricultural Palette (Vibrant Emerald, Sovereign Gold, Alabaster)
+val ForestGreenPrimary = Color(0xFF15803D)   // Vibrant Lush Agricultural Emerald (Lively, High-Contrast)
+val ForestGreenLight = Color(0xFF22C55E)     // Luminous Fresh Leaf Emerald
+val ForestGreenDark = Color(0xFF0F5128)      // Rich Deep Forest Emerald
+val ForestGreenGlow = Color(0xFF86EFAC)      // Bright Highlight Glow Accent
 
 // Sovereign Gold & Royal Amber
-val SovereignGold = Color(0xFFC6922C)         // Royal Sovereign Gold
-val AmberSecondary = Color(0xFFC6922C)       // Royal Sovereign Gold
-val AmberLight = Color(0xFFE5B54E)           // Luminous Gold Accent
-val AmberDark = Color(0xFF8C6010)            // Antique Imperial Gold / Bronze
+val SovereignGold = Color(0xFFD97706)         // Rich Sovereign Gold
+val AmberSecondary = Color(0xFFD97706)       // Vibrant Harvest Amber
+val AmberLight = Color(0xFFFBBF24)           // Luminous Sunlit Gold Accent
+val AmberDark = Color(0xFF92400E)            // Deep Imperial Bronze
+
+// Attractive Button Highlight & Gradient Tokens
+val ButtonEmeraldGradientStart = Color(0xFF15803D)
+val ButtonEmeraldGradientEnd = Color(0xFF16A34A)
+val ButtonGoldGradientStart = Color(0xFFD97706)
+val ButtonGoldGradientEnd = Color(0xFFF59E0B)
+val ButtonBlueGradientStart = Color(0xFF0284C7)
+val ButtonBlueGradientEnd = Color(0xFF0EA5E9)
+
+val ButtonHighlightBorder = Color(0xFF86EFAC)
+val ButtonGoldBorder = Color(0xFFFDE68A)
+val ButtonHighlightElevation = Color(0x3315803D)
+
 
 // Royal Gold Specific Tokens
 val RoyalGold = Color(0xFFC6922C)

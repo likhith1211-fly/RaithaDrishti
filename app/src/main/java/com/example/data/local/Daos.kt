@@ -124,6 +124,57 @@ interface WeatherCacheDao {
 }
 
 @Dao
+interface SavedMandiPriceDao {
+    @Query("SELECT * FROM saved_mandi_prices ORDER BY savedAt DESC")
+    fun getAllSavedPrices(): Flow<List<SavedMandiPriceEntity>>
+
+    @Query("SELECT * FROM saved_mandi_prices WHERE commodity = :commodity ORDER BY savedAt DESC")
+    fun getSavedPricesForCommodity(commodity: String): Flow<List<SavedMandiPriceEntity>>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM saved_mandi_prices WHERE commodity = :commodity AND mandiName = :mandiName LIMIT 1)")
+    fun isPriceSaved(commodity: String, mandiName: String): Flow<Boolean>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM saved_mandi_prices WHERE commodity = :commodity AND mandiName = :mandiName LIMIT 1)")
+    suspend fun isPriceSavedSync(commodity: String, mandiName: String): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavedPrice(price: SavedMandiPriceEntity): Long
+
+    @Query("DELETE FROM saved_mandi_prices WHERE id = :id")
+    suspend fun deleteSavedPriceById(id: Long)
+
+    @Query("DELETE FROM saved_mandi_prices WHERE commodity = :commodity AND mandiName = :mandiName")
+    suspend fun deleteSavedPrice(commodity: String, mandiName: String)
+
+    @Query("DELETE FROM saved_mandi_prices")
+    suspend fun clearAllSavedPrices()
+}
+
+@Dao
+interface CachedWeatherReportDao {
+    @Query("SELECT * FROM cached_weather_reports ORDER BY cachedAt DESC")
+    fun getAllReports(): Flow<List<CachedWeatherReportEntity>>
+
+    @Query("SELECT * FROM cached_weather_reports ORDER BY cachedAt DESC LIMIT :limit")
+    fun getRecentReports(limit: Int = 10): Flow<List<CachedWeatherReportEntity>>
+
+    @Query("SELECT * FROM cached_weather_reports WHERE locationName = :locationName ORDER BY cachedAt DESC LIMIT 1")
+    fun getLatestForLocation(locationName: String): Flow<CachedWeatherReportEntity?>
+
+    @Query("SELECT * FROM cached_weather_reports WHERE locationName = :locationName ORDER BY cachedAt DESC LIMIT 1")
+    suspend fun getLatestForLocationSync(locationName: String): CachedWeatherReportEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReport(report: CachedWeatherReportEntity): Long
+
+    @Query("DELETE FROM cached_weather_reports WHERE id = :id")
+    suspend fun deleteReportById(id: Long)
+
+    @Query("DELETE FROM cached_weather_reports")
+    suspend fun clearAllReports()
+}
+
+@Dao
 interface PriceAlertDao {
     @Query("SELECT * FROM price_alerts ORDER BY createdAt DESC")
     fun getAllAlerts(): Flow<List<PriceAlertEntity>>
@@ -140,5 +191,6 @@ interface PriceAlertDao {
     @Query("DELETE FROM price_alerts WHERE id = :id")
     suspend fun deleteAlertById(id: Long)
 }
+
 
 

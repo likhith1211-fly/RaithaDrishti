@@ -1011,40 +1011,154 @@ fun CameraCaptureScreen(
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                Text(
-                                    text = diagnosisResult.diagnosis,
-                                    color = Color.White,
-                                    fontSize = 19.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
+                                // 1. Exact Issue Identified
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFF1B4D3E),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, SovereignGold.copy(alpha = 0.6f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = SovereignGold,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(
+                                                text = "Exact Issue Identified (ನಿಖರ ಸಮಸ್ಯೆ):",
+                                                color = AmberLight,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.5.sp
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = diagnosisResult.exactProblemIdentified ?: diagnosisResult.diagnosis,
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                }
 
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
 
                                 Text(
                                     text = diagnosisResult.summary,
                                     color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 13.5.sp,
-                                    lineHeight = 20.sp
+                                    fontSize = 13.sp,
+                                    lineHeight = 19.sp
                                 )
 
-                                if (diagnosisResult.immediateActions.isNotEmpty()) {
+                                // 2. What Exactly To Do (Action Protocol)
+                                val steps = if (diagnosisResult.stepByStepActionPlan.isNotEmpty()) {
+                                    diagnosisResult.stepByStepActionPlan
+                                } else {
+                                    diagnosisResult.immediateActions
+                                }
+
+                                if (steps.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        text = "Top Immediate Action:",
+                                        text = "What Exactly To Do (ಏನು ಮಾಡಬೇಕು?):",
                                         color = AmberLight,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        steps.take(3).forEachIndexed { idx, step ->
+                                            Row(
+                                                verticalAlignment = Alignment.Top,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Surface(
+                                                    color = SovereignGold,
+                                                    shape = CircleShape,
+                                                    modifier = Modifier.size(18.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = "${idx + 1}",
+                                                            color = Color(0xFF1B4D3E),
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                                Text(
+                                                    text = step,
+                                                    color = Color.White.copy(alpha = 0.95f),
+                                                    fontSize = 12.5.sp,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 3. Ensured & Locally Available Fertilizers
+                                if (diagnosisResult.verifiedLocalMarketFertilizers.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
                                     Text(
-                                        text = "• ${diagnosisResult.immediateActions.first()}",
-                                        color = Color.White.copy(alpha = 0.95f),
+                                        text = "Ensured Fertilizers in Local Market (ಖಚಿತ ಗೊಬ್ಬರಗಳು):",
+                                        color = SovereignGold,
+                                        fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        diagnosisResult.verifiedLocalMarketFertilizers.take(2).forEach { fert ->
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = Color(0xFF0A2419),
+                                                border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF2E7D32)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Column(modifier = Modifier.padding(10.dp)) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Text(
+                                                            text = fert.fertilizerName,
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 13.sp
+                                                        )
+                                                        Text(
+                                                            text = "✓ Verified Local",
+                                                            color = SovereignGold,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            fontSize = 10.5.sp
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = "🏬 ${fert.localMarketAvailability}",
+                                                        color = AmberLight.copy(alpha = 0.9f),
+                                                        fontSize = 11.5.sp
+                                                    )
+                                                    Text(
+                                                        text = "🧪 Mixing: ${fert.standardDosePerAcre} • Tank: ${fert.mixingPerTank}",
+                                                        color = Color(0xFFA5D6A7),
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Button to view full prescription report
+                                // Button to view full prescription report & interactive land size mixing calculator
                                 Button(
                                     onClick = {
                                         onViewFullDiagnosis?.invoke()
@@ -1053,7 +1167,7 @@ fun CameraCaptureScreen(
                                     shape = RoundedCornerShape(14.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(50.dp)
+                                        .height(52.dp)
                                         .testTag("camera_view_full_report_button")
                                 ) {
                                     Icon(
@@ -1062,12 +1176,20 @@ fun CameraCaptureScreen(
                                         tint = Color(0xFF1A1300)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "View Full Prescription & Dosage Report",
-                                        color = Color(0xFF1A1300),
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 15.sp
-                                    )
+                                    Column(horizontalAlignment = Alignment.Start) {
+                                        Text(
+                                            text = "Open Land Size Calculator & Full Prescription",
+                                            color = Color(0xFF1A1300),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.5.sp
+                                        )
+                                        Text(
+                                            text = "ಜಮೀನಿನ ವಿಸ್ತೀರ್ಣಕ್ಕೆ ತಕ್ಕಂತೆ ಗೊಬ್ಬರ & ನೀರಿನ ಪ್ರಮಾಣ",
+                                            color = Color(0xFF2E1A00),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(8.dp))

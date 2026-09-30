@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,15 +20,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,11 +70,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.local.CachedWeatherReportEntity
 import com.example.data.local.DiagnosisEntity
+import com.example.data.local.SavedMandiPriceEntity
 import com.example.data.model.AppLanguage
 import com.example.data.model.CropDiagnosisResult
 import com.example.ui.components.PrescriptionSlipDialog
+import com.example.ui.components.RaithaGoldButton
+import com.example.ui.components.RaithaHighlightedButton
+import com.example.ui.components.RaithaOutlinedHighlightedButton
 import com.example.ui.components.sharePrescriptionText
+import com.example.ui.theme.AmberLight
+import com.example.ui.theme.ForestGreenDark
 import com.example.ui.theme.ForestGreenPrimary
 import com.example.ui.viewmodel.RaithaDrishtiViewModel
 import java.text.SimpleDateFormat
@@ -77,6 +96,8 @@ fun HistoryProfileScreen(
     val context = LocalContext.current
     val currentLang by viewModel.currentLanguage.collectAsState()
     val historyList by viewModel.diagnosesHistory.collectAsState()
+    val savedMandiPrices by viewModel.allSavedMandiPrices.collectAsState()
+    val cachedWeatherReports by viewModel.allCachedWeatherReports.collectAsState()
     val currentAccount by viewModel.currentAccount.collectAsState()
     val allAccounts by viewModel.allFarmerAccounts.collectAsState()
     val activeFarmerName by viewModel.activeFarmerName.collectAsState()
@@ -86,6 +107,7 @@ fun HistoryProfileScreen(
 
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var viewingDiagnosisResult by remember { mutableStateOf<Pair<CropDiagnosisResult, String>?>(null) }
+    var selectedOfflineTab by remember { mutableStateOf(0) } // 0: Diagnoses, 1: Saved Mandi, 2: Cached Weather
 
     LazyColumn(
         modifier = modifier
@@ -146,22 +168,17 @@ fun HistoryProfileScreen(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(
+                        RaithaGoldButton(
+                            text = when (currentLang) {
+                                AppLanguage.KANNADA -> "ಪ್ರೊಫೈಲ್ ನಮೂದಿಸಿ"
+                                AppLanguage.HINDI -> "विवरण दर्ज करें"
+                                AppLanguage.ENGLISH -> "Enter Profile Details"
+                            },
+                            icon = Icons.Default.Edit,
+                            height = 46.dp,
                             onClick = { showEditProfileDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.testTag("enter_farmer_details_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                when (currentLang) {
-                                    AppLanguage.KANNADA -> "ಪ್ರೊಫೈಲ್ ನಮೂದಿಸಿ"
-                                    AppLanguage.HINDI -> "विवरण दर्ज करें"
-                                    AppLanguage.ENGLISH -> "Enter Details"
-                                }
-                            )
-                        }
+                        )
                     }
                 }
             } else {
@@ -303,124 +320,304 @@ fun HistoryProfileScreen(
                             Spacer(modifier = Modifier.height(14.dp))
                         }
 
-                        Button(
+                        RaithaOutlinedHighlightedButton(
+                            text = when (currentLang) {
+                                AppLanguage.KANNADA -> "ಪ್ರೊಫೈಲ್ ಬದಲಾಯಿಸಿ"
+                                AppLanguage.HINDI -> "प्रोफ़ाइल संपादित करें"
+                                AppLanguage.ENGLISH -> "Edit Farmer Profile"
+                            },
+                            icon = Icons.Default.Edit,
+                            height = 46.dp,
                             onClick = { showEditProfileDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("edit_profile_button")
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section Title: Offline Room Database Records with 3 Tabs
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("room_offline_storage_header_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, ForestGreenPrimary.copy(alpha = 0.25f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storage,
+                            contentDescription = "Room DB",
+                            tint = ForestGreenPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text(
+                            text = when (currentLang) {
+                                AppLanguage.KANNADA -> "ಸ್ಥಳೀಯ ಆಫ್‌ಲೈನ್ ದಾಖಲೆಗಳು (Room DB)"
+                                AppLanguage.HINDI -> "स्थानीय ऑफ़लाइन रिकॉर्ड्स (Room DB)"
+                                AppLanguage.ENGLISH -> "Local Offline Records (Room DB)"
+                            },
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 3 Segments: Diagnoses, Saved Mandi, Offline Weather
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // 0: Diagnoses
+                        val isDiag = selectedOfflineTab == 0
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isDiag) ForestGreenPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                            border = if (isDiag) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { selectedOfflineTab = 0 }
+                                .testTag("tab_diagnoses_history")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = null,
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = when (currentLang) {
-                                    AppLanguage.KANNADA -> "ಪ್ರೊಫೈಲ್ ಬದಲಾಯಿಸಿ"
-                                    AppLanguage.HINDI -> "प्रोफ़ाइल संपादित करें"
-                                    AppLanguage.ENGLISH -> "Edit Profile"
-                                },
-                                fontSize = 12.sp,
-                                color = Color(0xFF2E7D32),
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ರೋಗ (${historyList.size})"
+                                        AppLanguage.HINDI -> "रोग (${historyList.size})"
+                                        AppLanguage.ENGLISH -> "Rx (${historyList.size})"
+                                    },
+                                    color = if (isDiag) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        // 1: Saved Mandi Prices
+                        val isMandi = selectedOfflineTab == 1
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isMandi) ForestGreenPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                            border = if (isMandi) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { selectedOfflineTab = 1 }
+                                .testTag("tab_saved_mandi")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಮಂಡಿ (${savedMandiPrices.size})"
+                                        AppLanguage.HINDI -> "मंडी (${savedMandiPrices.size})"
+                                        AppLanguage.ENGLISH -> "Mandi (${savedMandiPrices.size})"
+                                    },
+                                    color = if (isMandi) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        // 2: Cached Weather Reports
+                        val isWeather = selectedOfflineTab == 2
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isWeather) ForestGreenPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                            border = if (isWeather) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { selectedOfflineTab = 2 }
+                                .testTag("tab_cached_weather")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಹವಾಮಾನ (${cachedWeatherReports.size})"
+                                        AppLanguage.HINDI -> "मौसम (${cachedWeatherReports.size})"
+                                        AppLanguage.ENGLISH -> "Weather (${cachedWeatherReports.size})"
+                                    },
+                                    color = if (isWeather) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Section Title: Diagnoses History scoped to this farmer
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.History,
-                        contentDescription = "History",
-                        tint = Color(0xFF2E7D32),
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        text = when (currentLang) {
-                            AppLanguage.KANNADA -> "ಉಳಿಸಲಾದ ರೋಗ ದಾಖಲೆಗಳು (${historyList.size})"
-                            AppLanguage.HINDI -> "सुरक्षित रोग इतिहास (${historyList.size})"
-                            AppLanguage.ENGLISH -> "Saved Diagnoses History (${historyList.size})"
-                        },
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Surface(
-                    color = Color(0xFFE8F5E9),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "${historyList.size}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2E7D32),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-        }
-
-        if (historyList.isEmpty()) {
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಇನ್ನೂ ಯಾವುದೇ ರೋಗ ತಪಾಸಣೆ ದಾಖಲೆಗಳಿಲ್ಲ."
-                                AppLanguage.HINDI -> "कोई सुरक्षित रोग रिकॉर्ड नहीं है।"
-                                AppLanguage.ENGLISH -> "No saved crop diagnoses yet."
+        // Section Content based on selectedOfflineTab
+        when (selectedOfflineTab) {
+            0 -> {
+                // Diagnoses Tab Content
+                if (historyList.isEmpty()) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಇನ್ನೂ ಯಾವುದೇ ರೋಗ ತಪಾಸಣೆ ದಾಖಲೆಗಳಿಲ್ಲ."
+                                        AppLanguage.HINDI -> "कोई सुरक्षित रोग रिकॉर्ड नहीं है।"
+                                        AppLanguage.ENGLISH -> "No saved crop diagnoses yet."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಬೆಳೆ ವೈದ್ಯ ಟ್ಯಾಬ್‌ನಿಂದ ಫೋಟೋ ತೆಗೆದು ತಪಾಸಣೆ ಮಾಡಿ, ವರದಿಗಳು ಇಲ್ಲಿ ಉಳಿಯುತ್ತವೆ."
+                                        AppLanguage.HINDI -> "फसल डॉक्टर टैब से फोटो खींचकर जांचें, रिपोर्ट यहां सुरक्षित रहेगी।"
+                                        AppLanguage.ENGLISH -> "Diagnose crops in the Crop Doctor tab to see your prescriptions saved here."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(historyList, key = { it.id }) { item ->
+                        DiagnosisHistoryCard(
+                            item = item,
+                            language = currentLang,
+                            onViewPrescription = {
+                                viewingDiagnosisResult = Pair(item.toDomain(), item.weatherContext)
                             },
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಬೆಳೆ ವೈದ್ಯ ಟ್ಯಾಬ್‌ನಿಂದ ಫೋಟೋ ತೆಗೆದು ತಪಾಸಣೆ ಮಾಡಿ, ವರದಿಗಳು ಇಲ್ಲಿ ಉಳಿಯುತ್ತವೆ."
-                                AppLanguage.HINDI -> "फसल डॉक्टर टैब से फोटो खींचकर जांचें, रिपोर्ट यहां सुरक्षित रहेगी।"
-                                AppLanguage.ENGLISH -> "Diagnose crops in the Crop Doctor tab to see your prescriptions saved here."
+                            onShare = {
+                                sharePrescriptionText(context, item.toDomain(), item.weatherContext)
                             },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            onDelete = { viewModel.deleteHistoryItem(item.id) }
                         )
                     }
                 }
             }
-        } else {
-            items(historyList, key = { it.id }) { item ->
-                DiagnosisHistoryCard(
-                    item = item,
-                    language = currentLang,
-                    onViewPrescription = {
-                        viewingDiagnosisResult = Pair(item.toDomain(), item.weatherContext)
-                    },
-                    onShare = {
-                        sharePrescriptionText(context, item.toDomain(), item.weatherContext)
-                    },
-                    onDelete = { viewModel.deleteHistoryItem(item.id) }
-                )
+            1 -> {
+                // Saved Mandi Prices Tab Content
+                if (savedMandiPrices.isEmpty()) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಉಳಿಸಲಾದ ಮಂಡಿ ದರಗಳಿಲ್ಲ."
+                                        AppLanguage.HINDI -> "कोई सुरक्षित मंडी भाव नहीं हैं।"
+                                        AppLanguage.ENGLISH -> "No saved mandi prices yet."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಮಾರುಕಟ್ಟೆ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಮಂಡಿ ಕಾರ್ಡ್‌ಗಳಲ್ಲಿ 'ಉಳಿಸಿ' ಬಟನ್ ಒತ್ತುವ ಮೂಲಕ ಇಲ್ಲಿ ವೀಕ್ಷಿಸಬಹುದು."
+                                        AppLanguage.HINDI -> "मंडी स्क्रीन पर 'सुरक्षित करें' बटन दबाकर ऑफ़लाइन देखें।"
+                                        AppLanguage.ENGLISH -> "Bookmark prices in the Mandi tab to track them here offline."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(savedMandiPrices, key = { it.id }) { priceItem ->
+                        SavedMandiPriceHistoryCard(
+                            item = priceItem,
+                            language = currentLang,
+                            onDelete = { viewModel.removeSavedMandiPrice(priceItem.id) }
+                        )
+                    }
+                }
+            }
+            2 -> {
+                // Cached Weather Reports Tab Content
+                if (cachedWeatherReports.isEmpty()) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಸಂಗ್ರಹಿಸಲಾದ ಹವಾಮಾನ ವರದಿಗಳಿಲ್ಲ."
+                                        AppLanguage.HINDI -> "कोई सुरक्षित मौसम रिपोर्ट नहीं है।"
+                                        AppLanguage.ENGLISH -> "No cached weather reports yet."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಹವಾಮಾನ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ನವೀಕರಿಸಿದಾಗ ವರದಿಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ಉಳಿಯುತ್ತವೆ."
+                                        AppLanguage.HINDI -> "मौसम अपडेट करते ही रिपोर्ट अपने आप ऑफ़लाइन सुरक्षित हो जाती है।"
+                                        AppLanguage.ENGLISH -> "Reports are automatically cached in Room when fetching weather."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(cachedWeatherReports, key = { it.id }) { report ->
+                        CachedWeatherReportHistoryCard(
+                            item = report,
+                            language = currentLang,
+                            onDelete = { viewModel.deleteCachedWeatherReport(report.id) }
+                        )
+                    }
+                }
             }
         }
 
@@ -685,6 +882,264 @@ fun EditProfileDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SavedMandiPriceHistoryCard(
+    item: SavedMandiPriceEntity,
+    language: AppLanguage,
+    onDelete: () -> Unit
+) {
+    val dateStr = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(item.savedAt))
+    val isPositive = item.dailyChangePercent >= 0
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("saved_mandi_item_${item.id}"),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, ForestGreenPrimary.copy(alpha = 0.2f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(ForestGreenPrimary.copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storefront,
+                            contentDescription = null,
+                            tint = ForestGreenPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = item.commodity,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = item.mandiName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Remove Saved Price",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = when (language) {
+                            AppLanguage.KANNADA -> "ಮಾದರಿ ದರ (Modal)"
+                            AppLanguage.HINDI -> "मॉडल भाव (Modal)"
+                            AppLanguage.ENGLISH -> "Modal Price"
+                        },
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "₹${item.modalPrice.toInt()}/Q",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        color = ForestGreenPrimary
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Min - Max",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "₹${item.minPrice.toInt()} - ₹${item.maxPrice.toInt()}",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isPositive) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPositive) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
+                            contentDescription = null,
+                            tint = if (isPositive) Color(0xFF166534) else Color(0xFF991B1B),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "${if (isPositive) "+" else ""}${String.format(Locale.US, "%.1f", item.dailyChangePercent)}%",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (isPositive) Color(0xFF166534) else Color(0xFF991B1B)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Saved: $dateStr",
+                fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun CachedWeatherReportHistoryCard(
+    item: CachedWeatherReportEntity,
+    language: AppLanguage,
+    onDelete: () -> Unit
+) {
+    val dateStr = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.ENGLISH).format(Date(item.cachedAt))
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("cached_weather_item_${item.id}"),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, ForestGreenPrimary.copy(alpha = 0.2f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFE0F2FE), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cloud,
+                            contentDescription = null,
+                            tint = Color(0xFF0284C7),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = item.locationName,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = item.weatherCondition,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Remove Cached Report",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Weather Metrics Grid
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Thermostat, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", item.temperature)}°C",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.WaterDrop, contentDescription = null, tint = Color(0xFF0284C7), modifier = Modifier.size(16.dp))
+                    Text(
+                        text = "${item.humidity}%",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Air, contentDescription = null, tint = ForestGreenPrimary, modifier = Modifier.size(16.dp))
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", item.windSpeed)} km/h",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            if (item.advisorySummary.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = item.advisorySummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Cached: $dateStr",
+                fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

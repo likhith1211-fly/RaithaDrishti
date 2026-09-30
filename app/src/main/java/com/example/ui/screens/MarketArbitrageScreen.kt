@@ -37,9 +37,14 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.OfflineBolt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
+import com.example.ui.components.RaithaGoldButton
+import com.example.ui.components.RaithaHighlightedButton
+import com.example.ui.components.RaithaOutlinedHighlightedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -94,6 +99,7 @@ fun MarketArbitrageScreen(
     val marketLastSyncedAt by viewModel.marketLastSyncedAt.collectAsState()
     val marketSyncBannerMessage by viewModel.marketSyncBannerMessage.collectAsState()
     val cachedCount by viewModel.cachedCommoditiesCount.collectAsState()
+    val savedMandiPrices by viewModel.allSavedMandiPrices.collectAsState()
 
     Column(
         modifier = modifier
@@ -341,54 +347,28 @@ fun MarketArbitrageScreen(
                         }
                     }
 
-                    // Manual Refresh Button
-                    Button(
-                        onClick = { viewModel.refreshMarketData(selectedCommodity, isUserInitiated = true) },
-                        enabled = !isMarketRefreshing,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ForestGreenPrimary,
-                            disabledContainerColor = ForestGreenPrimary.copy(alpha = 0.6f)
-                        ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        modifier = Modifier.testTag("market_refresh_button")
-                    ) {
-                        if (isMarketRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = when (currentLang) {
-                                    AppLanguage.KANNADA -> "ಸಿಂಕ್..."
-                                    AppLanguage.HINDI -> "सिंक..."
-                                    AppLanguage.ENGLISH -> "Syncing..."
-                                },
-                                fontSize = 13.sp,
-                                color = Color.White
-                            )
+                    // Manual Refresh Highlighted Button
+                    RaithaGoldButton(
+                        text = if (isMarketRefreshing) {
+                            when (currentLang) {
+                                AppLanguage.KANNADA -> "ಸಿಂಕ್..."
+                                AppLanguage.HINDI -> "सिंक..."
+                                AppLanguage.ENGLISH -> "Syncing..."
+                            }
                         } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = when (currentLang) {
-                                    AppLanguage.KANNADA -> "ದರ ನವೀಕರಿಸಿ"
-                                    AppLanguage.HINDI -> "भाव रीफ्रेश"
-                                    AppLanguage.ENGLISH -> "Refresh Rates"
-                                },
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
+                            when (currentLang) {
+                                AppLanguage.KANNADA -> "ದರ ನವೀಕರಿಸಿ"
+                                AppLanguage.HINDI -> "भाव रीफ्रेश"
+                                AppLanguage.ENGLISH -> "Refresh Rates"
+                            }
+                        },
+                        icon = Icons.Default.Refresh,
+                        isLoading = isMarketRefreshing,
+                        height = 42.dp,
+                        fontSize = 12.5.sp,
+                        onClick = { viewModel.refreshMarketData(selectedCommodity, isUserInitiated = true) },
+                        modifier = Modifier.testTag("market_refresh_button")
+                    )
                 }
 
                 // Cache Resilience Info Bar
@@ -636,11 +616,28 @@ fun MarketArbitrageScreen(
                 mandi.mandiName.contains("Mysuru") -> MandiMysuruColor
                 else -> MandiChikkamagaluruColor
             }
+            val isSaved = savedMandiPrices.any {
+                it.commodity.equals(analytics.commodity, ignoreCase = true) &&
+                it.mandiName.equals(mandi.mandiName, ignoreCase = true)
+            }
             MandiSnapshotCard(
+                commodity = analytics.commodity,
                 mandi = mandi,
                 accentColor = accentColor,
                 currentLang = currentLang,
-                reportDate = weeklyAnalysis.reportDate
+                reportDate = weeklyAnalysis.reportDate,
+                isSaved = isSaved,
+                onToggleSave = {
+                    viewModel.toggleSaveMandiPrice(
+                        commodity = analytics.commodity,
+                        mandiName = mandi.mandiName,
+                        modalPrice = mandi.modalPrice,
+                        minPrice = mandi.minPrice,
+                        maxPrice = mandi.maxPrice,
+                        change = mandi.dailyChangePercent,
+                        reportDate = weeklyAnalysis.reportDate
+                    )
+                }
             )
         }
 
@@ -1227,10 +1224,13 @@ private fun ArbitrageMetricPill(
 
 @Composable
 private fun MandiSnapshotCard(
+    commodity: String = "",
     mandi: MandiPriceInfo,
     accentColor: Color,
     currentLang: AppLanguage = AppLanguage.KANNADA,
-    reportDate: String = ""
+    reportDate: String = "",
+    isSaved: Boolean = false,
+    onToggleSave: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1399,6 +1399,39 @@ private fun MandiSnapshotCard(
                         text = "₹${String.format("%.1f", mandi.maxPrice / 100)}/kg",
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                if (isSaved) {
+                    RaithaOutlinedHighlightedButton(
+                        text = when (currentLang) {
+                            AppLanguage.KANNADA -> "ದರ ಉಳಿಸಲಾಗಿದೆ (Saved)"
+                            AppLanguage.HINDI -> "सुरक्षित है (Saved)"
+                            AppLanguage.ENGLISH -> "Saved in Room"
+                        },
+                        icon = Icons.Default.Bookmark,
+                        height = 38.dp,
+                        onClick = onToggleSave,
+                        modifier = Modifier.testTag("saved_mandi_${mandi.mandiName.lowercase().replace(" ", "_")}")
+                    )
+                } else {
+                    RaithaGoldButton(
+                        text = when (currentLang) {
+                            AppLanguage.KANNADA -> "ದರ ಉಳಿಸಿ (Room DB)"
+                            AppLanguage.HINDI -> "भाव सुरक्षित करें"
+                            AppLanguage.ENGLISH -> "Save Price to Room"
+                        },
+                        icon = Icons.Default.BookmarkBorder,
+                        height = 38.dp,
+                        fontSize = 12.5.sp,
+                        onClick = onToggleSave,
+                        modifier = Modifier.testTag("save_mandi_${mandi.mandiName.lowercase().replace(" ", "_")}")
                     )
                 }
             }

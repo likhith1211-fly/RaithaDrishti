@@ -84,6 +84,8 @@ import com.example.data.model.KarnatakaCropCategory
 import com.example.data.model.KarnatakaCropItem
 import com.example.ui.components.CameraCaptureScreen
 import com.example.ui.components.DiagnosisResultView
+import com.example.ui.components.RaithaGoldButton
+import com.example.ui.components.RaithaHighlightedButton
 import com.example.ui.theme.ForestGreenPrimary
 import com.example.ui.viewmodel.RaithaDrishtiViewModel
 
@@ -676,7 +678,14 @@ fun CropDoctorScreen(
                                     )
                                 }
 
-                                Button(
+                                RaithaGoldButton(
+                                    text = when (currentLang) {
+                                        AppLanguage.KANNADA -> "ಕ್ಯಾಮೆರಾ (CameraX)"
+                                        AppLanguage.HINDI -> "कैमरा (CameraX)"
+                                        AppLanguage.ENGLISH -> "CameraX"
+                                    },
+                                    icon = Icons.Default.CameraAlt,
+                                    height = 48.dp,
                                     onClick = {
                                         val permissionCheck = ContextCompat.checkSelfPermission(
                                             context,
@@ -688,28 +697,8 @@ fun CropDoctorScreen(
                                             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .height(48.dp)
-                                        .testTag("camera_capture_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CameraAlt,
-                                        contentDescription = "CameraX High-Res",
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = when (currentLang) {
-                                            AppLanguage.KANNADA -> "ಕ್ಯಾಮೆರಾ (CameraX)"
-                                            AppLanguage.HINDI -> "कैमरा (CameraX)"
-                                            AppLanguage.ENGLISH -> "CameraX"
-                                        },
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                    modifier = Modifier.testTag("camera_capture_button")
+                                )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
@@ -1183,56 +1172,31 @@ fun CropDoctorScreen(
             }
         }
 
-        // Run Diagnosis Action Button (Prominent Royal Emerald 56dp height)
-        Button(
+        // Run Diagnosis Action Button (Vibrant highlighted Emerald with glowing border and elevation)
+        RaithaHighlightedButton(
+            text = if (isDiagnosing) {
+                when (currentLang) {
+                    AppLanguage.KANNADA -> "ರೋಗ ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ..."
+                    AppLanguage.HINDI -> "जांच की जा रही है..."
+                    AppLanguage.ENGLISH -> "Agronomist AI Analyzing..."
+                }
+            } else {
+                when (currentLang) {
+                    AppLanguage.KANNADA -> "ರೋಗ ಪರೀಕ್ಷೆ ಪ್ರಾರಂಭಿಸಿ (AI Diagnosis)"
+                    AppLanguage.HINDI -> "फसल जांच शुरू करें"
+                    AppLanguage.ENGLISH -> "Run AI Agronomist Diagnosis"
+                }
+            },
+            icon = if (!isDiagnosing) Icons.Default.Psychology else null,
+            height = 56.dp,
+            fontSize = 16.5.sp,
+            enabled = !isDiagnosing,
+            isLoading = isDiagnosing,
             onClick = { viewModel.runCropDiagnosis() },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .testTag("run_diagnosis_button"),
-            colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary),
-            shape = RoundedCornerShape(16.dp),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
-            enabled = !isDiagnosing
-        ) {
-            if (isDiagnosing) {
-                CircularProgressIndicator(
-                    color = com.example.ui.theme.AmberLight,
-                    modifier = Modifier.size(26.dp),
-                    strokeWidth = 3.dp
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Agronomist AI Analyzing Foliage...",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Psychology,
-                    contentDescription = "Diagnose",
-                    tint = com.example.ui.theme.AmberLight,
-                    modifier = Modifier.size(26.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ರೋಗ ಪರೀಕ್ಷೆ ಪ್ರಾರಂಭಿಸಿ (AI Diagnosis)"
-                        AppLanguage.HINDI -> "फसल जांच शुरू करें"
-                        AppLanguage.ENGLISH -> "Run AI Agronomist Diagnosis"
-                    },
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.3.sp
-                    )
-                )
-            }
-        }
+                .testTag("run_diagnosis_button")
+        )
 
         // Diagnosis Results Section
         latestDiagnosis?.let { result ->

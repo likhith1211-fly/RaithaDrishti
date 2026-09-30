@@ -32,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditLocation
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOn
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
@@ -72,11 +75,27 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.local.CachedWeatherReportEntity
 import com.example.data.model.AppLanguage
+import com.example.data.model.KARNATAKA_DISTRICTS
+import com.example.data.model.KarnatakaDistrict
 import com.example.ui.components.MicroWeatherWidget
+import com.example.ui.components.RaithaBlueButton
+import com.example.ui.components.RaithaCardActionButton
+import com.example.ui.components.RaithaGoldButton
+import com.example.ui.components.RaithaHighlightedButton
+import com.example.ui.components.RaithaOutlinedHighlightedButton
+import com.example.ui.theme.AmberLight
+import com.example.ui.theme.ForestGreenDark
+import com.example.ui.theme.ForestGreenLight
 import com.example.ui.theme.ForestGreenPrimary
+import com.example.ui.theme.SovereignGold
 import com.example.ui.viewmodel.RaithaDrishtiViewModel
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -94,6 +113,8 @@ fun WeatherAdvisoryScreen(
     val aiAdvisory by viewModel.aiWeatherAdvisory.collectAsState()
     val isGeneratingAdvisory by viewModel.isGeneratingAdvisory.collectAsState()
 
+    val cachedWeatherReports by viewModel.allCachedWeatherReports.collectAsState()
+
     var showGoogleMapsPinDialog by remember { mutableStateOf(false) }
 
     // Active coordinates to use
@@ -101,7 +122,7 @@ fun WeatherAdvisoryScreen(
     val activeLon = currentWeather?.longitude ?: selectedDistrict.lon
     val activeLocName = currentWeather?.location ?: selectedDistrict.name
 
-    // Location Permission Launcher
+    // Location Permission Launcher with high-accuracy live GPS query & reverse geocoding
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -111,53 +132,37 @@ fun WeatherAdvisoryScreen(
         if (granted) {
             try {
                 val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedClient.lastLocation.addOnSuccessListener { loc: Location? ->
-                    if (loc != null) {
-                        viewModel.updateExactCoordinates(
-                            lat = loc.latitude,
-                            lon = loc.longitude,
-                            customLabel = "ನನ್ನ ಹೊಲ / My Farm (${String.format("%.3f", loc.latitude)}, ${String.format("%.3f", loc.longitude)})"
-                        )
-                        Toast.makeText(context, "Exact Farm Location Connected!", Toast.LENGTH_SHORT).show()
-                    } else {
-                        // Fallback to LocationManager
-                        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                        val lastKnown = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                            ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                        if (lastKnown != null) {
-                            viewModel.updateExactCoordinates(
-                                lat = lastKnown.latitude,
-                                lon = lastKnown.longitude,
-                                customLabel = "ನನ್ನ ಹೊಲ / My Farm (${String.format("%.3f", lastKnown.latitude)}, ${String.format("%.3f", lastKnown.longitude)})"
-                            )
+                fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { loc: Location? ->
+                        if (loc != null) {
+                            viewModel.updateLocationFromGps(context, loc.latitude, loc.longitude)
+                            Toast.makeText(context, "ನಿಮ್ಮ ನೈಜ ಜಿಪಿಎಸ್ ಸ್ಥಳ ಸಂಪರ್ಕಗೊಂಡಿದೆ / Live GPS Connected!", Toast.LENGTH_SHORT).show()
                         } else {
-                            // Fallback to farmer's selected field district coordinates (e.g. Chikkamagaluru)
-                            val currentDist = viewModel.selectedDistrict.value
-                            viewModel.updateExactCoordinates(
-                                currentDist.lat,
-                                currentDist.lon,
-                                "ನನ್ನ ಹೊಲ / ${currentDist.name}"
-                            )
+                            fusedClient.lastLocation.addOnSuccessListener { lastLoc ->
+                                if (lastLoc != null) {
+                                    viewModel.updateLocationFromGps(context, lastLoc.latitude, lastLoc.longitude)
+                                    Toast.makeText(context, "GPS Location Updated", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                                    val lastKnown = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                                        ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                                    if (lastKnown != null) {
+                                        viewModel.updateLocationFromGps(context, lastKnown.latitude, lastKnown.longitude)
+                                    } else {
+                                        Toast.makeText(context, "GPS ಸಿಗ್ನಲ್ ಹುಡುಕಲಾಗುತ್ತಿದೆ. ದಯವಿಟ್ಟು ಜಿಲ್ಲೆಯನ್ನು ಆರಿಸಿ.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         }
                     }
-                }.addOnFailureListener {
-                    val currentDist = viewModel.selectedDistrict.value
-                    viewModel.updateExactCoordinates(
-                        currentDist.lat,
-                        currentDist.lon,
-                        "ನನ್ನ ಹೊಲ / ${currentDist.name}"
-                    )
-                }
+                    .addOnFailureListener {
+                        Toast.makeText(context, "GPS Error. Please select your district.", Toast.LENGTH_SHORT).show()
+                    }
             } catch (e: Exception) {
-                val currentDist = viewModel.selectedDistrict.value
-                viewModel.updateExactCoordinates(
-                    currentDist.lat,
-                    currentDist.lon,
-                    "ನನ್ನ ಹೊಲ / ${currentDist.name}"
-                )
+                Toast.makeText(context, "Location detection error. Please select your district.", Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(context, "Location permission denied. Showing district weather.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Location permission denied. Showing selected district weather.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -300,16 +305,26 @@ fun WeatherAdvisoryScreen(
                                 text = if (isExactLocationActive && exactLocationLabel != null) {
                                     exactLocationLabel!!
                                 } else {
-                                    "${selectedDistrict.name} (ಚಿಕ್ಕಮಗಳೂರು • Lat: ${String.format("%.3f", activeLat)}, Lon: ${String.format("%.3f", activeLon)})"
+                                    "${selectedDistrict.name} (${selectedDistrict.kannadaName} • Lat: ${String.format(Locale.US, "%.3f", activeLat)}, Lon: ${String.format(Locale.US, "%.3f", activeLon)})"
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = com.example.ui.theme.ForestGreenPrimary
+                                color = ForestGreenPrimary
                             )
                         }
                     }
 
-                    Button(
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    RaithaGoldButton(
+                        text = when (currentLang) {
+                            AppLanguage.KANNADA -> "ಜಿಪಿಎಸ್"
+                            AppLanguage.HINDI -> "जीपीएस"
+                            AppLanguage.ENGLISH -> "Live GPS"
+                        },
+                        icon = Icons.Default.MyLocation,
+                        height = 44.dp,
+                        fontSize = 13.5.sp,
                         onClick = {
                             locationPermissionLauncher.launch(
                                 arrayOf(
@@ -318,51 +333,36 @@ fun WeatherAdvisoryScreen(
                                 )
                             )
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = com.example.ui.theme.ForestGreenPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .height(44.dp)
-                            .testTag("get_gps_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MyLocation,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಜಿಪಿಎಸ್ ಪಡೆಯಿರಿ"
-                                AppLanguage.HINDI -> "जीपीएस लें"
-                                AppLanguage.ENGLISH -> "Get GPS"
-                            },
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                        modifier = Modifier.testTag("get_gps_button")
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Google Maps Integration Action Row
+                // Highlighted Action Row: Open in Maps & Change Location
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // 1. Open Exact Location in Google Maps Button
-                    Button(
+                    // 1. Open Exact Location in Google Maps (Vibrant Blue Highlighted Button)
+                    RaithaBlueButton(
+                        text = when (currentLang) {
+                            AppLanguage.KANNADA -> "ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್"
+                            AppLanguage.HINDI -> "Google Maps"
+                            AppLanguage.ENGLISH -> "Google Maps"
+                        },
+                        icon = Icons.Default.Map,
+                        height = 46.dp,
+                        fontSize = 12.5.sp,
                         onClick = {
-                            val encodedName = Uri.encode("RaithaDrishti Farm - $activeLocName")
-                            val geoUri = Uri.parse("geo:$activeLat,$activeLon?q=$activeLat,$activeLon($encodedName)")
+                            val encodedName = Uri.encode(activeLocName)
+                            val geoUri = Uri.parse("geo:0,0?q=$activeLat,$activeLon($encodedName)")
                             val mapIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
                                 setPackage("com.google.android.apps.maps")
                             }
                             try {
                                 context.startActivity(mapIntent)
                             } catch (e: Exception) {
-                                // Fallback to browser Google Maps
                                 val webIntent = Intent(
                                     Intent.ACTION_VIEW,
                                     Uri.parse("https://www.google.com/maps/search/?api=1&query=$activeLat,$activeLon")
@@ -370,64 +370,25 @@ fun WeatherAdvisoryScreen(
                                 context.startActivity(webIntent)
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1E88E5)
-                        ),
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
                             .testTag("open_in_google_maps_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Map,
-                            contentDescription = "Google Maps",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್‌ನಲ್ಲಿ ವೀಕ್ಷಿಸಿ"
-                                AppLanguage.HINDI -> "Google Maps पर देखें"
-                                AppLanguage.ENGLISH -> "Open in Google Maps"
-                            },
-                            color = Color.White,
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                    }
+                    )
 
-                    // 2. Select Location via Google Maps coordinates dialog
-                    OutlinedButton(
+                    // 2. Select Location Dialog (Highlighted Outlined Button)
+                    RaithaOutlinedHighlightedButton(
+                        text = when (currentLang) {
+                            AppLanguage.KANNADA -> "ಸ್ಥಳ ಬದಲಿಸಿ"
+                            AppLanguage.HINDI -> "स्थान बदलें"
+                            AppLanguage.ENGLISH -> "Change Location"
+                        },
+                        icon = Icons.Default.PinDrop,
+                        height = 46.dp,
                         onClick = { showGoogleMapsPinDialog = true },
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.5.dp, com.example.ui.theme.ForestGreenPrimary),
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
                             .testTag("pick_coordinates_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PinDrop,
-                            contentDescription = "Pin Location",
-                            tint = com.example.ui.theme.ForestGreenPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = when (currentLang) {
-                                AppLanguage.KANNADA -> "ನಿಖರ ಸ್ಥಳ ಪಿನ್ ಹೊಂದಿಸಿ"
-                                AppLanguage.HINDI -> "सटीक पिन सेट करें"
-                                AppLanguage.ENGLISH -> "Pin Farm Location"
-                            },
-                            color = com.example.ui.theme.ForestGreenPrimary,
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -747,8 +708,162 @@ fun WeatherAdvisoryScreen(
             }
         }
 
-        // Refresh Action Button
-        Button(
+        // Section: Offline Cached Weather Reports (Local Room Database)
+        if (cachedWeatherReports.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("cached_weather_reports_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ForestGreenLight.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Cloud,
+                                contentDescription = null,
+                                tint = ForestGreenPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when (currentLang) {
+                                    AppLanguage.KANNADA -> "ಸಂಗ್ರಹಿಸಲಾದ ಹವಾಮಾನ ವರದಿಗಳು (Offline Room)"
+                                    AppLanguage.HINDI -> "ऑफलाइन मौसम रिपोर्ट्स (Room DB)"
+                                    AppLanguage.ENGLISH -> "Offline Cached Reports (Room DB)"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Surface(
+                            color = ForestGreenPrimary.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "${cachedWeatherReports.size} ವರದಿಗಳು",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ForestGreenPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = when (currentLang) {
+                            AppLanguage.KANNADA -> "ಇಂಟರ್ನೆಟ್ ಇಲ್ಲದಿದ್ದಾಗಲೂ ಈ ಹಿಂದೆ ಸಂಗ್ರಹಿಸಲಾದ ಹವಾಮಾನ ಡೇಟಾ ಲಭ್ಯವಿದೆ:"
+                            AppLanguage.HINDI -> "इंटरनेट न होने पर भी पुराना सहेजा गया मौसम डेटा उपलब्ध रहता है:"
+                            AppLanguage.ENGLISH -> "Access previously cached telemetry and spray windows without internet:"
+                        },
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        cachedWeatherReports.take(5).forEach { report ->
+                            val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+                            val dateStr = dateFormat.format(Date(report.cachedAt))
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.updateExactCoordinates(
+                                            lat = report.latitude,
+                                            lon = report.longitude,
+                                            customLabel = report.locationName
+                                        )
+                                        Toast.makeText(context, "Loaded cached weather for ${report.locationName}", Toast.LENGTH_SHORT).show()
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = report.locationName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${report.temperature}°C",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 13.sp,
+                                                color = ForestGreenPrimary
+                                            )
+                                            Text(
+                                                text = "RH: ${report.humidity.toInt()}%",
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "Rain: ${report.precipitation}mm",
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = "Saved: $dateStr • ${report.sprayWindowStatus}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { viewModel.deleteCachedWeatherReport(report.id) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete Cached Report",
+                                            tint = Color(0xFFEF4444),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Prominent Highlighted Refresh Action Button
+        RaithaHighlightedButton(
+            text = when (currentLang) {
+                AppLanguage.KANNADA -> "ಹವಾಮಾನ ಮಾಹಿತಿ ನವೀಕರಿಸಿ (Refresh)"
+                AppLanguage.HINDI -> "मौसम अपडेट करें (Refresh)"
+                AppLanguage.ENGLISH -> "Refresh Live Micro-Weather"
+            },
+            icon = Icons.Default.Refresh,
+            height = 52.dp,
+            fontSize = 15.5.sp,
             onClick = {
                 if (isExactLocationActive && currentWeather != null) {
                     viewModel.updateExactCoordinates(currentWeather!!.latitude, currentWeather!!.longitude, exactLocationLabel)
@@ -758,101 +873,99 @@ fun WeatherAdvisoryScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
-                .testTag("refresh_weather_button"),
-            colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = "Refresh",
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = when (currentLang) {
-                    AppLanguage.KANNADA -> "ಹವಾಮಾನ ಮಾಹಿತಿ ನವೀಕರಿಸಿ"
-                    AppLanguage.HINDI -> "मौसम अपडेट करें"
-                    AppLanguage.ENGLISH -> "Refresh Live Micro-Weather"
-                },
-                fontSize = 15.5.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+                .testTag("refresh_weather_button")
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
     }
 
     if (showGoogleMapsPinDialog) {
-        GoogleMapsPinDialog(
+        DynamicLocationSelectorDialog(
             currentLat = activeLat,
             currentLon = activeLon,
             currentLang = currentLang,
             onDismiss = { showGoogleMapsPinDialog = false },
+            onApplyDistrict = { district ->
+                viewModel.setDistrict(district)
+                showGoogleMapsPinDialog = false
+                Toast.makeText(context, "Selected: ${district.name}", Toast.LENGTH_SHORT).show()
+            },
             onApplyCoordinates = { lat, lon, label ->
                 viewModel.updateExactCoordinates(lat, lon, label)
                 showGoogleMapsPinDialog = false
                 Toast.makeText(context, "Location updated: $label", Toast.LENGTH_SHORT).show()
             },
-            onOpenMapsApp = { lat, lon, label ->
-                val encoded = Uri.encode(label)
-                val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon($encoded)")
-                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                    setPackage("com.google.android.apps.maps")
-                }
-                try {
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lon"))
-                    context.startActivity(web)
+            onUseGps = {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+                showGoogleMapsPinDialog = false
+            },
+            onSearchPlace = { query ->
+                viewModel.searchAndSetCustomLocation(context, query) { success, msg ->
+                    if (success) {
+                        showGoogleMapsPinDialog = false
+                        Toast.makeText(context, "Found location: $msg", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         )
     }
 }
 
+/**
+ * Dynamic, Non-plotted Location Selector Dialog.
+ * Allows searching ANY town/taluk in Karnataka, 1-tap live GPS auto-detect,
+ * quick district selection across all 31 Karnataka Agro-Climatic Districts,
+ * or direct coordinates input. Eliminates any pre-fixed or plotted location locks.
+ */
 @Composable
-fun GoogleMapsPinDialog(
+fun DynamicLocationSelectorDialog(
     currentLat: Double,
     currentLon: Double,
     currentLang: AppLanguage,
     onDismiss: () -> Unit,
+    onApplyDistrict: (KarnatakaDistrict) -> Unit,
     onApplyCoordinates: (Double, Double, String) -> Unit,
-    onOpenMapsApp: (Double, Double, String) -> Unit
+    onUseGps: () -> Unit,
+    onSearchPlace: (String) -> Unit
 ) {
-    var latText by remember { mutableStateOf(String.format(java.util.Locale.US, "%.5f", currentLat)) }
-    var lonText by remember { mutableStateOf(String.format(java.util.Locale.US, "%.5f", currentLon)) }
-    var locationNameText by remember { mutableStateOf("Chikkamagaluru Farm") }
-
-    val presetLocations = listOf(
-        Triple("Chikkamagaluru (Town)", Pair(13.3161, 75.7720), "ಚಿಕ್ಕಮಗಳೂರು ಕೇಂದ್ರ"),
-        Triple("Mudigere (Coffee Estate)", Pair(13.1368, 75.6425), "ಮೂಡಿಗೆರೆ ಕಾಫಿ ತೋಟ"),
-        Triple("Koppa (Areca Valley)", Pair(13.5298, 75.3619), "ಕೊಪ್ಪ ಅಡಿಕೆ ಕಣಿವೆ"),
-        Triple("Sringeri (Spice Belt)", Pair(13.4194, 75.2570), "ಶೃಂಗೇರಿ ಸಾಂಬಾರ ಬೆಳೆ"),
-        Triple("Kalasa (Bhadra Basin)", Pair(13.2355, 75.3678), "ಕಳಸ ಭದ್ರಾ ಕಣಿವೆ"),
-        Triple("Kadur (Dry Plains)", Pair(13.5540, 76.0125), "ಕಡೂರು ಬಯಲು ಸೀಮೆ"),
-        Triple("Tarikere (Vegetables)", Pair(13.7126, 75.8155), "ತರೀಕೆರೆ ತರಕಾರಿ ವಲಯ"),
-        Triple("NR Pura (Rubber/Coffee)", Pair(13.6268, 75.5244), "ಎನ್.ಆರ್. ಪುರ")
-    )
+    var searchQuery by remember { mutableStateOf("") }
+    var latText by remember { mutableStateOf(String.format(Locale.US, "%.5f", currentLat)) }
+    var lonText by remember { mutableStateOf(String.format(Locale.US, "%.5f", currentLon)) }
+    var customFarmLabel by remember { mutableStateOf("") }
+    var showManualCoords by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.PinDrop,
-                    contentDescription = null,
-                    tint = Color(0xFF1E88E5),
-                    modifier = Modifier.size(24.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(ForestGreenPrimary.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Explore,
+                        contentDescription = null,
+                        tint = ForestGreenPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
                 Text(
                     text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್ ಹೊಲದ ನಿಖರ ಸ್ಥಳ"
-                        AppLanguage.HINDI -> "गूगल मैप्स सटीक खेत पिन"
-                        AppLanguage.ENGLISH -> "Google Maps Farm Pin & Location"
+                        AppLanguage.KANNADA -> "ನೈಜ ಹೊಲದ ಸ್ಥಳ & ಜಿಲ್ಲೆ ಆಯ್ಕೆ"
+                        AppLanguage.HINDI -> "खेत का वास्तविक स्थान व जिला"
+                        AppLanguage.ENGLISH -> "Farm Location & Agro-District"
                     },
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.5.sp
@@ -866,26 +979,56 @@ fun GoogleMapsPinDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
+                // 1. One-tap Live Device GPS (Highlighted Golden Button)
+                RaithaGoldButton(
                     text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ಚಿಕ್ಕಮಗಳೂರು ತಾಲ್ಲೂಕು ಆಯ್ಕೆ ಮಾಡಿ ಅಥವಾ ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್ ಅಕ್ಷಾಂಶ/ರೇಖಾಂಶ ದಾಖಲಿಸಿ:"
-                        AppLanguage.HINDI -> "चिकमगलूर तालुका चुनें या गूगल मैप्स से सटीक अक्षांश/देशांतर दर्ज करें:"
-                        AppLanguage.ENGLISH -> "Select Chikkamagaluru agro-zone or enter exact Google Maps coordinates:"
+                        AppLanguage.KANNADA -> "ನನ್ನ ನೈಜ ಸಾಧನ ಜಿಪಿಎಸ್ ಬಳಸಿ (Live GPS)"
+                        AppLanguage.HINDI -> "डिवाइस का सटीक GPS उपयोग करें"
+                        AppLanguage.ENGLISH -> "Detect My Live GPS Location"
                     },
+                    icon = Icons.Default.MyLocation,
+                    height = 46.dp,
                     fontSize = 13.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    onClick = onUseGps,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                // Quick Chikkamagaluru Presets
+                // 2. Search any Karnataka Village / Taluk / Town
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(
+                            when (currentLang) {
+                                AppLanguage.KANNADA -> "ಗ್ರಾಮ, ತಾಲ್ಲೂಕು ಅಥವಾ ಊರು ಹುಡುಕಿ (उदा. ಹಾಸನ, ಸಿರಸಿ...)"
+                                AppLanguage.HINDI -> "गांव, कस्बा या तालुका खोजें..."
+                                AppLanguage.ENGLISH -> "Search Village, Taluk, or Town..."
+                            },
+                            fontSize = 13.sp
+                        )
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { onSearchPlace(searchQuery) }
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = "Search Place", tint = ForestGreenPrimary)
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 3. Quick Agro-District Picker (Covers all Karnataka regions)
                 Text(
                     text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ತ್ವರಿತ ವಲಯಗಳು (ಚಿಕ್ಕಮಗಳೂರು):"
-                        AppLanguage.HINDI -> "त्वरित क्षेत्र (चिकमगलूर):"
-                        AppLanguage.ENGLISH -> "Quick Zones (Chikkamagaluru):"
+                        AppLanguage.KANNADA -> "ಕರ್ನಾಟಕದ ಪ್ರಮುಖ ಕೃಷಿ ಜಿಲ್ಲೆಗಳು (1-ಟ್ಯಾಪ್ ಆಯ್ಕೆ):"
+                        AppLanguage.HINDI -> "कर्नाटक के कृषि जिले (तुरंत चुनें):"
+                        AppLanguage.ENGLISH -> "Karnataka Agricultural Districts:"
                     },
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ForestGreenPrimary
                 )
 
                 Row(
@@ -894,131 +1037,118 @@ fun GoogleMapsPinDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    presetLocations.forEach { preset ->
+                    KARNATAKA_DISTRICTS.forEach { district ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                            modifier = Modifier.clickable {
-                                latText = String.format(java.util.Locale.US, "%.5f", preset.second.first)
-                                lonText = String.format(java.util.Locale.US, "%.5f", preset.second.second)
-                                locationNameText = preset.first
-                            }
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                            modifier = Modifier.clickable { onApplyDistrict(district) }
                         ) {
-                            Text(
-                                text = when (currentLang) {
-                                    AppLanguage.KANNADA -> preset.third
-                                    else -> preset.first
-                                },
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = district.name,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = district.kannadaName,
+                                    fontSize = 11.sp,
+                                    color = ForestGreenPrimary
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                OutlinedTextField(
-                    value = locationNameText,
-                    onValueChange = { locationNameText = it },
-                    label = {
-                        Text(
-                            when (currentLang) {
-                                AppLanguage.KANNADA -> "ಹೊಲದ ಹೆಸರು / ಪ್ರದೇಶ"
-                                AppLanguage.HINDI -> "खेत का नाम / क्षेत्र"
-                                AppLanguage.ENGLISH -> "Farm Name / Zone"
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedTextField(
-                        value = latText,
-                        onValueChange = { latText = it },
-                        label = { Text("Latitude (ಅಕ್ಷಾಂಶ)") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = lonText,
-                        onValueChange = { lonText = it },
-                        label = { Text("Longitude (ರೇಖಾಂಶ)") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
-                }
-
-                // Open in Maps preview button
-                Button(
-                    onClick = {
-                        val latVal = latText.toDoubleOrNull() ?: currentLat
-                        val lonVal = lonText.toDoubleOrNull() ?: currentLon
-                        onOpenMapsApp(latVal, lonVal, locationNameText)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                // Toggle for Manual Latitude / Longitude entry
+                TextButton(
+                    onClick = { showManualCoords = !showManualCoords },
+                    modifier = Modifier.align(Alignment.Start)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.OpenInNew,
+                        imageVector = if (showManualCoords) Icons.Default.CheckCircle else Icons.Default.PinDrop,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp),
+                        tint = ForestGreenPrimary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
+                        text = if (showManualCoords) "ಕಕ್ಷೆ ವಿವರ ಮರೆಮಾಡಿ (Hide Coordinates)" else "ಅಕ್ಷಾಂಶ/ರೇಖಾಂಶ ನೇರ ನಮೂದು (Custom Lat/Lon)",
+                        fontSize = 12.5.sp,
+                        color = ForestGreenPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                if (showManualCoords) {
+                    OutlinedTextField(
+                        value = customFarmLabel,
+                        onValueChange = { customFarmLabel = it },
+                        label = { Text("ಹೊಲದ ಹೆಸರು / Farm Label") },
+                        placeholder = { Text("e.g. My North Field, Plot 4") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = latText,
+                            onValueChange = { latText = it },
+                            label = { Text("Latitude") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = lonText,
+                            onValueChange = { lonText = it },
+                            label = { Text("Longitude") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    RaithaHighlightedButton(
                         text = when (currentLang) {
-                            AppLanguage.KANNADA -> "ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್‌ನಲ್ಲಿ ಈ ಪಿನ್ ತೆರೆಯಿರಿ"
-                            AppLanguage.HINDI -> "गूगल मैप्स में यह पिन खोलें"
-                            AppLanguage.ENGLISH -> "Open this pin in Google Maps"
+                            AppLanguage.KANNADA -> "ಈ ಕಕ್ಷೆಗಳನ್ನು ಅನ್ವಯಿಸಿ"
+                            AppLanguage.HINDI -> "निर्देशांक लागू करें"
+                            AppLanguage.ENGLISH -> "Apply Coordinates"
                         },
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        height = 44.dp,
+                        fontSize = 13.5.sp,
+                        onClick = {
+                            val latVal = latText.toDoubleOrNull() ?: currentLat
+                            val lonVal = lonText.toDoubleOrNull() ?: currentLon
+                            val lbl = customFarmLabel.ifBlank { "Farm (${String.format(Locale.US, "%.3f", latVal)}, ${String.format(Locale.US, "%.3f", lonVal)})" }
+                            onApplyCoordinates(latVal, lonVal, lbl)
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
         },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val latVal = latText.toDoubleOrNull() ?: currentLat
-                    val lonVal = lonText.toDoubleOrNull() ?: currentLon
-                    val label = locationNameText.ifBlank { "Farm (${String.format(java.util.Locale.US, "%.3f", latVal)}, ${String.format(java.util.Locale.US, "%.3f", lonVal)})" }
-                    onApplyCoordinates(latVal, lonVal, label)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(
-                    text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ಅನ್ವಯಿಸಿ & ಹವಾಮಾನ ಪಡೆಯಿರಿ"
-                        AppLanguage.HINDI -> "लागू करें और मौसम देखें"
-                        AppLanguage.ENGLISH -> "Apply & Fetch Weather"
-                    },
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
                     text = when (currentLang) {
-                        AppLanguage.KANNADA -> "ರದ್ದು"
-                        AppLanguage.HINDI -> "रद्द करें"
-                        AppLanguage.ENGLISH -> "Cancel"
-                    }
+                        AppLanguage.KANNADA -> "ಮುಚ್ಚಿ (Close)"
+                        AppLanguage.HINDI -> "बंद करें"
+                        AppLanguage.ENGLISH -> "Close"
+                    },
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
     )
 }
+

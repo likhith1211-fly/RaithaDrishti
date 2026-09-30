@@ -13,6 +13,13 @@ data class VerifiedFertilizerItem(
     val mixingInstructions: String,         // Step-by-step mixing directions
     val precaution: String                  // Safety, timing, and compatibility warning
 ) {
+    val standardDosePerAcreKg: Double? get() = standardDosePerAcreKgOrL
+    val standardDosePerAcre: String get() = "$standardDosePerAcreKgOrL ${if (dosageUnit.startsWith("g")) "kg" else "L"} / acre"
+    val localMarketAvailability: String get() = localBrandAvailability
+    val brandOrGrade: String get() = targetNutrient
+    val mixingPerTank: String get() = "${(dosagePerLiter * 16.0).toInt()} $dosageUnit per 16L tank"
+    val mixingPrecautions: String get() = precaution
+
     fun calculateQuantityForLand(acres: Double, lang: AppLanguage = AppLanguage.KANNADA): String {
         val safeAcres = if (acres <= 0.0) 1.0 else acres
         val totalAmount = standardDosePerAcreKgOrL * safeAcres

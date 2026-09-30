@@ -172,6 +172,40 @@ data class WeatherCacheEntity(
     val lastSyncedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "saved_mandi_prices")
+data class SavedMandiPriceEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val commodity: String,
+    val mandiName: String,
+    val modalPrice: Double,
+    val minPrice: Double,
+    val maxPrice: Double,
+    val dailyChangePercent: Double = 0.0,
+    val unit: String = "Quintal",
+    val notes: String = "",
+    val reportDate: String = "",
+    val savedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "cached_weather_reports")
+data class CachedWeatherReportEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val locationName: String,
+    val latitude: Double,
+    val longitude: Double,
+    val temperature: Double,
+    val humidity: Double,
+    val precipitation: Double,
+    val windSpeed: Double,
+    val weatherCondition: String,
+    val weatherCode: Int,
+    val advisorySummary: String,
+    val sprayWindowStatus: String,
+    val cachedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "price_alerts")
 data class PriceAlertEntity(
     @PrimaryKey(autoGenerate = true)
@@ -185,4 +219,5 @@ data class PriceAlertEntity(
     val lastTriggeredAt: Long? = null,
     val lastTriggeredMessage: String? = null
 )
+
 

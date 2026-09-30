@@ -16,6 +16,10 @@ import com.example.data.local.ProfileDao
 import com.example.data.local.ProfileEntity
 import com.example.data.local.WeatherCacheDao
 import com.example.data.local.WeatherCacheEntity
+import com.example.data.local.CachedWeatherReportDao
+import com.example.data.local.CachedWeatherReportEntity
+import com.example.data.local.SavedMandiPriceDao
+import com.example.data.local.SavedMandiPriceEntity
 import com.example.data.model.AppLanguage
 import com.example.data.model.CropDiagnosisResult
 import com.example.data.model.GeminiWeatherAdvisory
@@ -33,7 +37,9 @@ class RaithaDrishtiRepository(
     private val farmerAccountDao: FarmerAccountDao,
     private val marketPriceCacheDao: MarketPriceCacheDao,
     private val cachedMandiPriceDao: CachedMandiPriceDao,
+    private val savedMandiPriceDao: SavedMandiPriceDao,
     private val weatherCacheDao: WeatherCacheDao,
+    private val cachedWeatherReportDao: CachedWeatherReportDao,
     private val priceAlertDao: PriceAlertDao,
     private val weatherService: WeatherApiService,
     private val geminiService: GeminiDiagnosisService,
@@ -45,6 +51,59 @@ class RaithaDrishtiRepository(
     val allFarmerAccounts: Flow<List<FarmerAccountEntity>> = farmerAccountDao.getAllAccounts()
     val allPriceAlerts: Flow<List<PriceAlertEntity>> = priceAlertDao.getAllAlerts()
     val cachedCommoditiesCount: Flow<Int> = marketPriceCacheDao.getCacheCount()
+
+    // Saved Mandi Prices & Cached Weather Reports Flows
+    val allSavedMandiPrices: Flow<List<SavedMandiPriceEntity>> = savedMandiPriceDao.getAllSavedPrices()
+    val allCachedWeatherReports: Flow<List<CachedWeatherReportEntity>> = cachedWeatherReportDao.getAllReports()
+    val recentCachedWeatherReports: Flow<List<CachedWeatherReportEntity>> = cachedWeatherReportDao.getRecentReports(10)
+
+    fun isMandiPriceSaved(commodity: String, mandiName: String): Flow<Boolean> {
+        return savedMandiPriceDao.isPriceSaved(commodity, mandiName)
+    }
+
+    suspend fun saveMandiPrice(item: SavedMandiPriceEntity): Long {
+        return savedMandiPriceDao.insertSavedPrice(item)
+    }
+
+    suspend fun removeSavedMandiPrice(id: Long) {
+        savedMandiPriceDao.deleteSavedPriceById(id)
+    }
+
+    suspend fun removeSavedMandiPriceByDetails(commodity: String, mandiName: String) {
+        savedMandiPriceDao.deleteSavedPrice(commodity, mandiName)
+    }
+
+    suspend fun toggleSaveMandiPrice(
+        commodity: String,
+        mandiName: String,
+        modalPrice: Double,
+        minPrice: Double,
+        maxPrice: Double,
+        change: Double = 0.0,
+        reportDate: String = "",
+        unit: String = "Quintal"
+    ): Boolean {
+        val isAlreadySaved = savedMandiPriceDao.isPriceSavedSync(commodity, mandiName)
+        return if (isAlreadySaved) {
+            savedMandiPriceDao.deleteSavedPrice(commodity, mandiName)
+            false
+        } else {
+            savedMandiPriceDao.insertSavedPrice(
+                SavedMandiPriceEntity(
+                    commodity = commodity,
+                    mandiName = mandiName,
+                    modalPrice = modalPrice,
+                    minPrice = minPrice,
+                    maxPrice = maxPrice,
+                    dailyChangePercent = change,
+                    unit = unit,
+                    reportDate = reportDate,
+                    savedAt = System.currentTimeMillis()
+                )
+            )
+            true
+        }
+    }
 
     fun observeMarketCache(commodity: String): Flow<MarketPriceCacheEntity?> {
         return marketPriceCacheDao.getCache(commodity)
@@ -119,7 +178,7 @@ class RaithaDrishtiRepository(
     suspend fun fetchWeather(lat: Double, lon: Double, locationName: String): WeatherData {
         return try {
             val live = weatherService.fetchLiveWeather(lat, lon, locationName)
-            // Cache to Room database
+            // Cache to Room database (Key-Value)
             val existing = weatherCacheDao.getWeatherCacheSync(locationName)
             val advisoryJson = existing?.weatherAdvisoryJson ?: ""
             weatherCacheDao.insertOrUpdate(
@@ -130,6 +189,25 @@ class RaithaDrishtiRepository(
                     lastSyncedAt = System.currentTimeMillis()
                 )
             )
+            // Cache full offline weather report entity
+            try {
+                cachedWeatherReportDao.insertReport(
+                    CachedWeatherReportEntity(
+                        locationName = locationName,
+                        latitude = lat,
+                        longitude = lon,
+                        temperature = live.temperature,
+                        humidity = live.humidity,
+                        precipitation = live.precipitation,
+                        windSpeed = live.windSpeed,
+                        weatherCondition = if (live.precipitation > 0.0) "Rain" else if (live.humidity > 80.0) "High Humidity" else "Clear / Sunny",
+                        weatherCode = live.weatherCode,
+                        advisorySummary = live.agriAdvice,
+                        sprayWindowStatus = if (live.precipitation > 0.0 || live.windSpeed > 15.0) "Unfavorable" else "Optimal Morning Spray",
+                        cachedAt = System.currentTimeMillis()
+                    )
+                )
+            } catch (ignored: Exception) {}
             live
         } catch (e: Exception) {
             // Offline fallback: load from Room
@@ -147,17 +225,33 @@ class RaithaDrishtiRepository(
                     agriAdvice = "Offline cached advisory for $locationName"
                 )
             } else {
-                WeatherData(
-                    location = locationName,
-                    latitude = lat,
-                    longitude = lon,
-                    temperature = 26.5,
-                    humidity = 68.0,
-                    precipitation = 0.0,
-                    windSpeed = 9.0,
-                    weatherCode = 1,
-                    agriAdvice = "Offline default advisory for $locationName"
-                )
+                // Try from cached weather reports table
+                val report = cachedWeatherReportDao.getLatestForLocationSync(locationName)
+                if (report != null) {
+                    WeatherData(
+                        location = report.locationName,
+                        latitude = report.latitude,
+                        longitude = report.longitude,
+                        temperature = report.temperature,
+                        humidity = report.humidity,
+                        precipitation = report.precipitation,
+                        windSpeed = report.windSpeed,
+                        weatherCode = report.weatherCode,
+                        agriAdvice = report.advisorySummary
+                    )
+                } else {
+                    WeatherData(
+                        location = locationName,
+                        latitude = lat,
+                        longitude = lon,
+                        temperature = 26.5,
+                        humidity = 68.0,
+                        precipitation = 0.0,
+                        windSpeed = 9.0,
+                        weatherCode = 1,
+                        agriAdvice = "Offline default advisory for $locationName"
+                    )
+                }
             }
         }
     }
@@ -382,6 +476,10 @@ class RaithaDrishtiRepository(
 
     suspend fun deletePriceAlert(id: Long) {
         priceAlertDao.deleteAlertById(id)
+    }
+
+    suspend fun deleteCachedWeatherReport(id: Long) {
+        cachedWeatherReportDao.deleteReportById(id)
     }
 }
 

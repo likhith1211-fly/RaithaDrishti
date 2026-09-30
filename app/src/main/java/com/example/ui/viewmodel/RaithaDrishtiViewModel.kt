@@ -4,6 +4,9 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.content.Context
+import android.location.Geocoder
+import java.util.Locale
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
@@ -11,6 +14,8 @@ import com.example.data.local.DiagnosisEntity
 import com.example.data.local.FarmerAccountEntity
 import com.example.data.local.ProfileEntity
 import com.example.data.local.PriceAlertEntity
+import com.example.data.local.SavedMandiPriceEntity
+import com.example.data.local.CachedWeatherReportEntity
 import com.example.data.local.FarmerStorageManager
 import com.example.data.model.AppLanguage
 import com.example.data.model.CropDiagnosisResult
@@ -52,7 +57,9 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
             farmerAccountDao = db.farmerAccountDao(),
             marketPriceCacheDao = db.marketPriceCacheDao(),
             cachedMandiPriceDao = db.cachedMandiPriceDao(),
+            savedMandiPriceDao = db.savedMandiPriceDao(),
             weatherCacheDao = db.weatherCacheDao(),
+            cachedWeatherReportDao = db.cachedWeatherReportDao(),
             priceAlertDao = db.priceAlertDao(),
             weatherService = WeatherApiService(),
             geminiService = GeminiDiagnosisService(),
@@ -200,6 +207,55 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
     // --- Price Threshold Alerts ---
     val allPriceAlerts: StateFlow<List<PriceAlertEntity>> = repository.allPriceAlerts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- Saved Mandi Prices & Cached Weather Reports for Offline Access (Room DB) ---
+    val allSavedMandiPrices: StateFlow<List<SavedMandiPriceEntity>> = repository.allSavedMandiPrices
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allCachedWeatherReports: StateFlow<List<CachedWeatherReportEntity>> = repository.allCachedWeatherReports
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleSaveMandiPrice(
+        commodity: String,
+        mandiName: String,
+        modalPrice: Double,
+        minPrice: Double,
+        maxPrice: Double,
+        change: Double = 0.0,
+        reportDate: String = "",
+        unit: String = "Quintal"
+    ) {
+        viewModelScope.launch {
+            repository.toggleSaveMandiPrice(
+                commodity = commodity,
+                mandiName = mandiName,
+                modalPrice = modalPrice,
+                minPrice = minPrice,
+                maxPrice = maxPrice,
+                change = change,
+                reportDate = reportDate,
+                unit = unit
+            )
+        }
+    }
+
+    fun removeSavedMandiPrice(id: Long) {
+        viewModelScope.launch {
+            repository.removeSavedMandiPrice(id)
+        }
+    }
+
+    fun removeSavedMandiPriceByDetails(commodity: String, mandiName: String) {
+        viewModelScope.launch {
+            repository.removeSavedMandiPriceByDetails(commodity, mandiName)
+        }
+    }
+
+    fun deleteCachedWeatherReport(id: Long) {
+        viewModelScope.launch {
+            repository.deleteCachedWeatherReport(id)
+        }
+    }
 
     private val _triggeredAlerts = MutableStateFlow<List<MarketNotificationHelper.AlertTriggerResult>>(emptyList())
     val triggeredAlerts: StateFlow<List<MarketNotificationHelper.AlertTriggerResult>> = _triggeredAlerts.asStateFlow()
@@ -514,7 +570,8 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
         viewModelScope.launch {
             _isWeatherLoading.value = true
             _isExactLocationActive.value = true
-            val label = customLabel ?: "GPS Exact Farm (${String.format("%.3f", lat)}, ${String.format("%.3f", lon)})"
+            _farmerCoordinates.value = Pair(lat, lon)
+            val label = customLabel ?: "GPS Farm (${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)})"
             _exactLocationLabel.value = label
             try {
                 val data = repository.fetchWeather(lat, lon, label)
@@ -524,6 +581,95 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
                 // handle error
             } finally {
                 _isWeatherLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Resolves user's real GPS position using Android Geocoder into town/district name
+     * so they are NEVER forced to see a pre-fixed or plotted place.
+     */
+    fun updateLocationFromGps(context: Context, lat: Double, lon: Double) {
+        viewModelScope.launch {
+            _isWeatherLoading.value = true
+            _isExactLocationActive.value = true
+            _farmerCoordinates.value = Pair(lat, lon)
+
+            val resolvedName = try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                @Suppress("DEPRECATION")
+                val list = geocoder.getFromLocation(lat, lon, 1)
+                val addr = list?.firstOrNull()
+                if (addr != null) {
+                    val place = addr.locality ?: addr.subAdminArea ?: addr.adminArea ?: "My Farm"
+                    // Check if place matches any Karnataka district
+                    val matched = KARNATAKA_DISTRICTS.find {
+                        place.contains(it.name, ignoreCase = true) || it.name.contains(place, ignoreCase = true)
+                    }
+                    if (matched != null) {
+                        _selectedDistrict.value = matched
+                    }
+                    "$place (${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)})"
+                } else {
+                    "Farm (${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)})"
+                }
+            } catch (e: Exception) {
+                "Farm (${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)})"
+            }
+
+            _exactLocationLabel.value = resolvedName
+            try {
+                val data = repository.fetchWeather(lat, lon, resolvedName)
+                _currentWeather.value = data
+                fetchAiWeatherAdvisory(data, _currentLanguage.value)
+            } catch (e: Exception) {
+                // handle error
+            } finally {
+                _isWeatherLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Searches any user-typed village, town, or taluk anywhere in Karnataka
+     * and sets coordinates and weather dynamically.
+     */
+    fun searchAndSetCustomLocation(context: Context, query: String, onDone: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val trimmed = query.trim()
+            if (trimmed.isBlank()) {
+                onDone(false, "Please enter a location name")
+                return@launch
+            }
+            // 1. Direct match with Karnataka districts
+            val districtMatch = KARNATAKA_DISTRICTS.find {
+                it.name.contains(trimmed, ignoreCase = true) ||
+                it.kannadaName.contains(trimmed) ||
+                it.hindiName.contains(trimmed) ||
+                trimmed.contains(it.name, ignoreCase = true)
+            }
+            if (districtMatch != null) {
+                setDistrict(districtMatch)
+                onDone(true, districtMatch.name)
+                return@launch
+            }
+            // 2. Reverse Geocode via Android Geocoder
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                @Suppress("DEPRECATION")
+                val results = geocoder.getFromLocationName(trimmed, 1)
+                val item = results?.firstOrNull()
+                if (item != null) {
+                    val lat = item.latitude
+                    val lon = item.longitude
+                    val label = item.locality ?: item.subAdminArea ?: trimmed
+                    updateExactCoordinates(lat, lon, label)
+                    onDone(true, label)
+                } else {
+                    onDone(false, "Could not locate '$trimmed'. Try selecting from the districts list.")
+                }
+            } catch (e: Exception) {
+                onDone(false, "Location search error: ${e.localizedMessage ?: "Unknown error"}")
             }
         }
     }

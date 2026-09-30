@@ -8,11 +8,22 @@ import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -24,6 +35,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -120,6 +132,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+enum class SplashState {
+    INITIAL,
+    ENTRANCE,
+    EXIT
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
@@ -128,11 +146,15 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
     var showLanguageMenu by remember { mutableStateOf(false) }
     var showVoiceDialog by remember { mutableStateOf(false) }
 
-    // Fast, ultra-smooth opening animation state (completes within 1.2s to guarantee opening < 3 seconds)
+    // High-performance Compose transition API state (finishes comfortably < 1.4s, well below 3s target)
+    var splashState by remember { mutableStateOf(SplashState.INITIAL) }
     var isSplashVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        delay(900) // Brief smooth 900ms welcome entrance
+        splashState = SplashState.ENTRANCE
+        delay(950) // High-performance presentation
+        splashState = SplashState.EXIT
+        delay(320) // Smooth transition exit
         isSplashVisible = false
     }
 
@@ -382,15 +404,82 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
             }
         }
 
-        // Smooth launch opening splash animation (fades out within 1.2s total)
+        // High-performance launch splash animation using Compose Transition APIs (< 1.5s total load)
+        val splashTransition = updateTransition(targetState = splashState, label = "SplashTransition")
+
+        val splashScale by splashTransition.animateFloat(
+            transitionSpec = {
+                if (targetState == SplashState.EXIT) {
+                    tween(durationMillis = 320, easing = FastOutSlowInEasing)
+                } else {
+                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+                }
+            },
+            label = "SplashScale"
+        ) { state ->
+            when (state) {
+                SplashState.INITIAL -> 0.60f
+                SplashState.ENTRANCE -> 1.0f
+                SplashState.EXIT -> 1.08f
+            }
+        }
+
+        val splashAlpha by splashTransition.animateFloat(
+            transitionSpec = {
+                tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            },
+            label = "SplashAlpha"
+        ) { state ->
+            when (state) {
+                SplashState.INITIAL -> 0f
+                SplashState.ENTRANCE -> 1f
+                SplashState.EXIT -> 0f
+            }
+        }
+
+        val splashContentOffsetY by splashTransition.animateDp(
+            transitionSpec = {
+                spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+            },
+            label = "SplashOffsetY"
+        ) { state ->
+            when (state) {
+                SplashState.INITIAL -> 40.dp
+                SplashState.ENTRANCE -> 0.dp
+                SplashState.EXIT -> (-20).dp
+            }
+        }
+
+        // Ambient pulsing glow halo using infinite transition
+        val infiniteTransition = rememberInfiniteTransition(label = "SplashHalo")
+        val haloScale by infiniteTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 1.25f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "HaloScale"
+        )
+        val haloAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.40f,
+            targetValue = 0.08f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "HaloAlpha"
+        )
+
         AnimatedVisibility(
             visible = isSplashVisible,
-            enter = fadeIn(),
-            exit = fadeOut(animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing))
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(320, easing = FastOutSlowInEasing)) + scaleOut(targetScale = 1.06f, animationSpec = tween(320))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .alpha(splashAlpha)
                     .background(
                         Brush.verticalGradient(
                             listOf(ForestGreenDark, ForestGreenPrimary)
@@ -401,20 +490,33 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.padding(24.dp)
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .scale(splashScale)
+                        .offset(y = splashContentOffsetY)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .background(AmberLight, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Agriculture,
-                            contentDescription = "RaithaDrishti",
-                            tint = Color(0xFF1A1200),
-                            modifier = Modifier.size(46.dp)
+                    Box(contentAlignment = Alignment.Center) {
+                        // Pulsing ambient glow ring
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp * haloScale)
+                                .background(AmberLight.copy(alpha = haloAlpha), CircleShape)
                         )
+
+                        // Main icon badge
+                        Box(
+                            modifier = Modifier
+                                .size(84.dp)
+                                .background(AmberLight, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Agriculture,
+                                contentDescription = "RaithaDrishti",
+                                tint = Color(0xFF1A1200),
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
                     }
 
                     Text(
@@ -444,8 +546,14 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(0xFF34D399), CircleShape)
+                            )
                             Text(
                                 text = "⚡ Superfast Ready < 2s",
                                 color = Color.White,

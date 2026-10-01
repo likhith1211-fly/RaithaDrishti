@@ -5,37 +5,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDp
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -86,6 +68,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.LayoutDirection
 import com.example.data.model.AppLanguage
 import com.example.ui.components.VoiceAssistantDialog
 import com.example.ui.screens.AppFeatureGuideScreen
@@ -132,12 +115,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-enum class SplashState {
-    INITIAL,
-    ENTRANCE,
-    EXIT
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
@@ -146,24 +123,13 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
     var showLanguageMenu by remember { mutableStateOf(false) }
     var showVoiceDialog by remember { mutableStateOf(false) }
 
-    // High-performance Compose transition API state (finishes comfortably < 1.4s, well below 3s target)
-    var splashState by remember { mutableStateOf(SplashState.INITIAL) }
-    var isSplashVisible by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        splashState = SplashState.ENTRANCE
-        delay(950) // High-performance presentation
-        splashState = SplashState.EXIT
-        delay(320) // Smooth transition exit
-        isSplashVisible = false
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                CenterAlignedTopAppBar(
-                    navigationIcon = {
+                Column {
+                    CenterAlignedTopAppBar(
+                        navigationIcon = {
                         // Language Switcher Button (3 languages: Kannada, Hindi, English)
                         Box {
                             Surface(
@@ -288,7 +254,19 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
                     ),
                     modifier = Modifier.testTag("app_top_bar")
                 )
-            },
+                // Visual effect: vibrant amber accent gradient divider line below top bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.5.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(AmberLight.copy(alpha = 0.35f), AmberSecondary, AmberLight.copy(alpha = 0.35f))
+                            )
+                        )
+                )
+            }
+        },
             floatingActionButton = {
                 // Extended FAB for Voice AI
                 ExtendedFloatingActionButton(
@@ -364,26 +342,26 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
                 }
             }
         ) { innerPadding ->
+            val topPadding = maxOf(0.dp, innerPadding.calculateTopPadding())
+            val bottomPadding = maxOf(0.dp, innerPadding.calculateBottomPadding())
+            val startPadding = maxOf(0.dp, innerPadding.calculateStartPadding(LayoutDirection.Ltr))
+            val endPadding = maxOf(0.dp, innerPadding.calculateEndPadding(LayoutDirection.Ltr))
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(
+                        start = startPadding,
+                        top = topPadding,
+                        end = endPadding,
+                        bottom = bottomPadding
+                    )
             ) {
-                // Smooth AnimatedContent tab switcher for instant and silky smooth transitions
-                AnimatedContent(
+                // Silky smooth and instantaneous screen crossfade effect
+                Crossfade(
                     targetState = selectedTab,
-                    transitionSpec = {
-                        if (targetState > initialState) {
-                            (slideInHorizontally { width -> width / 4 } + fadeIn()).togetherWith(
-                                slideOutHorizontally { width -> -width / 4 } + fadeOut()
-                            )
-                        } else {
-                            (slideInHorizontally { width -> -width / 4 } + fadeIn()).togetherWith(
-                                slideOutHorizontally { width -> width / 4 } + fadeOut()
-                            )
-                        }
-                    },
-                    label = "tab_transition"
+                    animationSpec = tween(durationMillis = 120),
+                    label = "tab_crossfade"
                 ) { targetTabIndex ->
                     when (targetTabIndex) {
                         0 -> CropDoctorScreen(
@@ -399,168 +377,6 @@ fun RaithaDrishtiApp(viewModel: RaithaDrishtiViewModel) {
                         )
                         4 -> WeatherAdvisoryScreen(viewModel = viewModel)
                         5 -> HistoryProfileScreen(viewModel = viewModel)
-                    }
-                }
-            }
-        }
-
-        // High-performance launch splash animation using Compose Transition APIs (< 1.5s total load)
-        val splashTransition = updateTransition(targetState = splashState, label = "SplashTransition")
-
-        val splashScale by splashTransition.animateFloat(
-            transitionSpec = {
-                if (targetState == SplashState.EXIT) {
-                    tween(durationMillis = 320, easing = FastOutSlowInEasing)
-                } else {
-                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-                }
-            },
-            label = "SplashScale"
-        ) { state ->
-            when (state) {
-                SplashState.INITIAL -> 0.60f
-                SplashState.ENTRANCE -> 1.0f
-                SplashState.EXIT -> 1.08f
-            }
-        }
-
-        val splashAlpha by splashTransition.animateFloat(
-            transitionSpec = {
-                tween(durationMillis = 300, easing = FastOutSlowInEasing)
-            },
-            label = "SplashAlpha"
-        ) { state ->
-            when (state) {
-                SplashState.INITIAL -> 0f
-                SplashState.ENTRANCE -> 1f
-                SplashState.EXIT -> 0f
-            }
-        }
-
-        val splashContentOffsetY by splashTransition.animateDp(
-            transitionSpec = {
-                spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
-            },
-            label = "SplashOffsetY"
-        ) { state ->
-            when (state) {
-                SplashState.INITIAL -> 40.dp
-                SplashState.ENTRANCE -> 0.dp
-                SplashState.EXIT -> (-20).dp
-            }
-        }
-
-        // Ambient pulsing glow halo using infinite transition
-        val infiniteTransition = rememberInfiniteTransition(label = "SplashHalo")
-        val haloScale by infiniteTransition.animateFloat(
-            initialValue = 1.0f,
-            targetValue = 1.25f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "HaloScale"
-        )
-        val haloAlpha by infiniteTransition.animateFloat(
-            initialValue = 0.40f,
-            targetValue = 0.08f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "HaloAlpha"
-        )
-
-        AnimatedVisibility(
-            visible = isSplashVisible,
-            enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(320, easing = FastOutSlowInEasing)) + scaleOut(targetScale = 1.06f, animationSpec = tween(320))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(splashAlpha)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(ForestGreenDark, ForestGreenPrimary)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier
-                        .padding(24.dp)
-                        .scale(splashScale)
-                        .offset(y = splashContentOffsetY)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        // Pulsing ambient glow ring
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp * haloScale)
-                                .background(AmberLight.copy(alpha = haloAlpha), CircleShape)
-                        )
-
-                        // Main icon badge
-                        Box(
-                            modifier = Modifier
-                                .size(84.dp)
-                                .background(AmberLight, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Agriculture,
-                                contentDescription = "RaithaDrishti",
-                                tint = Color(0xFF1A1200),
-                                modifier = Modifier.size(48.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = "ರೈತ ದೃಷ್ಟಿ • RaithaDrishti",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 24.sp
-                        ),
-                        color = Color.White
-                    )
-
-                    Text(
-                        text = "ಕರ್ನಾಟಕ ಕೃಷಿ ರೋಗ ತಪಾಸಣೆ & APMC ಮಾರುಕಟ್ಟೆ",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.5.sp
-                        ),
-                        color = AmberLight
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White.copy(alpha = 0.15f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, AmberLight.copy(alpha = 0.5f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(Color(0xFF34D399), CircleShape)
-                            )
-                            Text(
-                                text = "⚡ Superfast Ready < 2s",
-                                color = Color.White,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
                     }
                 }
             }

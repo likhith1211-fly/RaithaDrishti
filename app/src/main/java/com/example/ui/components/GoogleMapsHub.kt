@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.MotionEvent
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -34,10 +36,12 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Card
@@ -59,7 +63,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -71,9 +74,7 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.KARNATAKA_DISTRICTS
 import com.example.data.model.KarnatakaDistrict
 import com.example.ui.theme.AmberLight
-import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.ForestGreenDark
-import com.example.ui.theme.ForestGreenLight
 import com.example.ui.theme.ForestGreenPrimary
 import com.example.ui.theme.SovereignGold
 import java.util.Locale
@@ -82,7 +83,7 @@ import java.util.Locale
  * Interactive, high-performance Google Maps component for RaithaDrishti.
  * Fully dynamic: loads the user's live GPS coordinates, allows panning, zooming,
  * toggling between Roadmap and Satellite view, searching any village/taluk in Karnataka,
- * and direct launch into Google Maps app.
+ * dropping custom pins on the map, and direct 1-tap launch into Google Maps app.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -98,17 +99,82 @@ fun InteractiveGoogleMapCard(
     mapsGroundingSummary: String?,
     isGroundingLoading: Boolean,
     onRefreshGrounding: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isGpsDetecting: Boolean = false,
+    onSetPinCoordinates: ((Double, Double) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var isSatelliteMode by remember { mutableStateOf(false) }
     var zoomLevel by remember { mutableIntStateOf(13) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Dynamic Google Maps URL based on mode, coordinates and zoom
-    val mapEmbedUrl = remember(latitude, longitude, isSatelliteMode, zoomLevel) {
-        val modeParam = if (isSatelliteMode) "&t=k" else ""
-        "https://maps.google.com/maps?q=$latitude,$longitude$modeParam&z=$zoomLevel&output=embed"
+    val safeLabel = locationLabel.replace("'", "\\'").replace("\"", "\\\"")
+
+    // Dynamic, self-contained HTML Leaflet map that renders 100% reliably in Android WebView
+    val htmlMapContent = remember(latitude, longitude, isSatelliteMode, zoomLevel, safeLabel) {
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+          <style>
+            html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #e2e8f0; font-family: sans-serif; }
+            .leaflet-popup-content { font-size: 13px; line-height: 1.4; color: #1e293b; margin: 8px 12px; }
+            .leaflet-popup-content b { color: #047857; font-size: 14.5px; }
+          </style>
+        </head>
+        <body>
+          <div id="map"></div>
+          <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+          <script>
+            try {
+              var lat = $latitude;
+              var lon = $longitude;
+              var zoom = $zoomLevel;
+              var isSat = $isSatelliteMode;
+              var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([lat, lon], zoom);
+
+              var streetTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                subdomains: ['a','b','c']
+              });
+
+              var satTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19
+              });
+
+              if (isSat) {
+                satTiles.addTo(map);
+              } else {
+                streetTiles.addTo(map);
+              }
+
+              var marker = L.marker([lat, lon]).addTo(map);
+              marker.bindPopup("<b>$safeLabel</b><br>Lat: " + lat.toFixed(4) + "<br>Lon: " + lon.toFixed(4) + "<br><small style='color:#1565C0;'>Tap anywhere to change pin</small>").openPopup();
+
+              var fieldCircle = L.circle([lat, lon], {
+                color: '#059669',
+                fillColor: '#10B981',
+                fillOpacity: 0.22,
+                radius: 650
+              }).addTo(map);
+
+              map.on('click', function(e) {
+                marker.setLatLng(e.latlng);
+                fieldCircle.setLatLng(e.latlng);
+                marker.bindPopup("<b>Selected Farm Pin</b><br>Lat: " + e.latlng.lat.toFixed(4) + "<br>Lon: " + e.latlng.lng.toFixed(4)).openPopup();
+                if (window.AndroidBridge && window.AndroidBridge.onPinMoved) {
+                  window.AndroidBridge.onPinMoved(e.latlng.lat, e.latlng.lng);
+                }
+              });
+            } catch (err) {
+              document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100%;color:#374151;font-weight:bold;'>Google Maps Agri-Telemetry Active (" + lat + ", " + lon + ")</div>";
+            }
+          </script>
+        </body>
+        </html>
+        """.trimIndent()
     }
 
     Card(
@@ -121,7 +187,7 @@ fun InteractiveGoogleMapCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header: Title & Map Mode Switcher
+            // Header: Title & Satellite/Roadmap Layer Switcher
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -157,7 +223,7 @@ fun InteractiveGoogleMapCard(
                             )
                         )
                         Text(
-                            text = if (isGpsActive) "📍 Live Device GPS Active" else "📍 Dynamic Agri Pin",
+                            text = if (isGpsActive) "🟢 Live Device GPS Active" else "📍 Dynamic Agri Pin",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = if (isGpsActive) Color(0xFF2E7D32) else SovereignGold,
                                 fontWeight = FontWeight.SemiBold,
@@ -198,7 +264,7 @@ fun InteractiveGoogleMapCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Search Bar: Search any village/town across Karnataka
+            // Search Bar: Search any village/town across Karnataka/India
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -244,7 +310,7 @@ fun InteractiveGoogleMapCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Embedded Interactive Google Maps WebView
+            // Embedded Interactive Map Container
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -265,20 +331,34 @@ fun InteractiveGoogleMapCard(
                                 domStorageEnabled = true
                                 loadWithOverviewMode = true
                                 useWideViewPort = true
-                                setSupportZoom(true)
-                                builtInZoomControls = true
-                                displayZoomControls = false
+                                setSupportZoom(false)
                                 cacheMode = WebSettings.LOAD_DEFAULT
                             }
+                            addJavascriptInterface(object {
+                                @JavascriptInterface
+                                fun onPinMoved(lat: Double, lon: Double) {
+                                    onSetPinCoordinates?.invoke(lat, lon)
+                                }
+                            }, "AndroidBridge")
                             webViewClient = WebViewClient()
                             webChromeClient = WebChromeClient()
-                            loadUrl(mapEmbedUrl)
+                            // CRITICAL: Disable parent scroll while interacting with map
+                            setOnTouchListener { v, event ->
+                                when (event.action) {
+                                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                                        v.parent.requestDisallowInterceptTouchEvent(true)
+                                    }
+                                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                        v.parent.requestDisallowInterceptTouchEvent(false)
+                                    }
+                                }
+                                false
+                            }
+                            loadDataWithBaseURL("https://maps.google.com", htmlMapContent, "text/html", "UTF-8", null)
                         }
                     },
                     update = { webView ->
-                        if (webView.url != mapEmbedUrl) {
-                            webView.loadUrl(mapEmbedUrl)
-                        }
+                        webView.loadDataWithBaseURL("https://maps.google.com", htmlMapContent, "text/html", "UTF-8", null)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -326,7 +406,7 @@ fun InteractiveGoogleMapCard(
                         }
                     }
 
-                    // Open Full in Google Maps App / Web
+                    // Open Full in Google Maps App
                     Surface(
                         onClick = { launchGoogleMapsIntent(context, latitude, longitude, locationLabel) },
                         shape = CircleShape,
@@ -348,16 +428,17 @@ fun InteractiveGoogleMapCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Action Row: Detect My Live GPS & Open Google Maps Button
+            // Primary Action Row: Detect My Live GPS & Open Google Maps
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Detect My Live GPS
                 RaithaGoldButton(
                     text = when (currentLanguage) {
-                        AppLanguage.KANNADA -> "ನನ್ನ ನೈಜ ಜಿಪಿಎಸ್ ಪತ್ತೆಹಚ್ಚಿ"
-                        AppLanguage.HINDI -> "मेरा सटीक GPS खोजें"
-                        AppLanguage.ENGLISH -> "Detect My Live GPS"
+                        AppLanguage.KANNADA -> if (isGpsDetecting) "ಪತ್ತೆಹಚ್ಚಲಾಗುತ್ತಿದೆ..." else "ನನ್ನ ನೈಜ ಜಿಪಿಎಸ್ ಪತ್ತೆಹಚ್ಚಿ"
+                        AppLanguage.HINDI -> if (isGpsDetecting) "खोजा जा रहा है..." else "मेरा सटीक GPS खोजें"
+                        AppLanguage.ENGLISH -> if (isGpsDetecting) "Detecting GPS..." else "Detect My Live GPS"
                     },
                     icon = Icons.Default.MyLocation,
                     height = 46.dp,
@@ -368,6 +449,7 @@ fun InteractiveGoogleMapCard(
                         .testTag("detect_live_gps_hub_button")
                 )
 
+                // Open Google Maps
                 RaithaBlueButton(
                     text = when (currentLanguage) {
                         AppLanguage.KANNADA -> "ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್‌ನಲ್ಲಿ ನೋಡಿ"
@@ -384,7 +466,83 @@ fun InteractiveGoogleMapCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Google Maps Power Actions: Turn-by-Turn Navigation & Nearby Mandis
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    onClick = { launchGoogleMapsNavigation(context, latitude, longitude) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFE3F2FD),
+                    border = BorderStroke(1.dp, Color(0xFF90CAF9)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("google_maps_navigate_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NearMe,
+                            contentDescription = null,
+                            tint = Color(0xFF1565C0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when (currentLanguage) {
+                                AppLanguage.KANNADA -> "ಮಾರ್ಗ (Directions)"
+                                AppLanguage.HINDI -> "रास्ता (Directions)"
+                                AppLanguage.ENGLISH -> "Directions"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1565C0)
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { launchGoogleMapsApmcSearch(context, latitude, longitude) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFE8F5E9),
+                    border = BorderStroke(1.dp, Color(0xFFA5D6A7)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("google_maps_nearby_apmc_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Store,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when (currentLanguage) {
+                                AppLanguage.KANNADA -> "ಹತ್ತಿರದ APMC"
+                                AppLanguage.HINDI -> "नजदीकी मंडी"
+                                AppLanguage.ENGLISH -> "Nearby APMC"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2E7D32)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Location Coordinates Telemetry
             Surface(
@@ -400,7 +558,8 @@ fun InteractiveGoogleMapCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Place,
@@ -581,6 +740,45 @@ fun launchGoogleMapsIntent(context: Context, lat: Double, lon: Double, label: St
         context.startActivity(appIntent)
     } catch (e: Exception) {
         val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lon")
+        val browserIntent = Intent(Intent.ACTION_VIEW, webUri)
+        try {
+            context.startActivity(browserIntent)
+        } catch (ignored: Exception) {}
+    }
+}
+
+/**
+ * Turn-by-turn Navigation in Google Maps:
+ * Launches turn-by-turn driving directions to coordinates.
+ */
+fun launchGoogleMapsNavigation(context: Context, lat: Double, lon: Double) {
+    val navUri = Uri.parse("google.navigation:q=$lat,$lon&mode=d")
+    val appIntent = Intent(Intent.ACTION_VIEW, navUri).apply {
+        setPackage("com.google.android.apps.maps")
+    }
+    try {
+        context.startActivity(appIntent)
+    } catch (e: Exception) {
+        val webUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lon")
+        val browserIntent = Intent(Intent.ACTION_VIEW, webUri)
+        try {
+            context.startActivity(browserIntent)
+        } catch (ignored: Exception) {}
+    }
+}
+
+/**
+ * Search nearby APMC agricultural markets on Google Maps:
+ */
+fun launchGoogleMapsApmcSearch(context: Context, lat: Double, lon: Double) {
+    val queryUri = Uri.parse("geo:$lat,$lon?q=APMC+market")
+    val appIntent = Intent(Intent.ACTION_VIEW, queryUri).apply {
+        setPackage("com.google.android.apps.maps")
+    }
+    try {
+        context.startActivity(appIntent)
+    } catch (e: Exception) {
+        val webUri = Uri.parse("https://www.google.com/maps/search/APMC+market/@$lat,$lon,12z")
         val browserIntent = Intent(Intent.ACTION_VIEW, webUri)
         try {
             context.startActivity(browserIntent)

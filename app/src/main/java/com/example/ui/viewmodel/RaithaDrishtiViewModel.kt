@@ -162,7 +162,7 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
     )
     val farmerCoordinates: StateFlow<Pair<Double, Double>> = _farmerCoordinates.asStateFlow()
 
-    private val _selectedMapMandiId = MutableStateFlow<String?>("chikkamagaluru_apmc")
+    private val _selectedMapMandiId = MutableStateFlow<String?>(null)
     val selectedMapMandiId: StateFlow<String?> = _selectedMapMandiId.asStateFlow()
 
     private val _mapLayer = MutableStateFlow("MANDI_NETWORK")
@@ -407,12 +407,12 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
         name: String,
         village: String,
         birthYear: Int,
-        district: String = "Chikkamagaluru",
+        district: String = "Bengaluru",
         crops: String = "",
         acres: Double = 0.0,
         phoneNumber: String = "",
-        lat: Double = 13.3161,
-        lon: Double = 75.7720
+        lat: Double = 12.9716,
+        lon: Double = 77.5946
     ) {
         val sanitizedName = name.trim()
         val sanitizedVillage = village.trim()
@@ -679,26 +679,28 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
 
     /**
      * Bulletproof live location detector.
-     * Uses Fused Location Provider, LocationManager, and IP Geolocation fallback so that
+     * Runs on Dispatchers.IO so Tasks.await never blocks the main thread.
+     * Uses Fused Location Provider, LocationManager, and multi-endpoint IP Geolocation fallback so that
      * fetching the current location ALWAYS works reliably (even in emulators, indoors, or on remote devices).
      */
     @SuppressLint("MissingPermission")
     fun detectLiveLocation(context: Context, onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _isGpsDetecting.value = true
             try {
                 var foundLocation: Pair<Double, Double>? = null
+                var detectedPlaceHint: String? = null
 
                 // Tier 1: Check Fused Location Provider Client (Fastest on real devices)
                 try {
                     val fusedClient = LocationServices.getFusedLocationProviderClient(context)
                     val lastTask = fusedClient.lastLocation
-                    val lastLoc = Tasks.await(lastTask, 1500, TimeUnit.MILLISECONDS)
+                    val lastLoc = Tasks.await(lastTask, 2000, TimeUnit.MILLISECONDS)
                     if (lastLoc != null && (lastLoc.latitude != 0.0 || lastLoc.longitude != 0.0)) {
                         foundLocation = Pair(lastLoc.latitude, lastLoc.longitude)
                     } else {
                         val currentTask = fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                        val currLoc = Tasks.await(currentTask, 2500, TimeUnit.MILLISECONDS)
+                        val currLoc = Tasks.await(currentTask, 3000, TimeUnit.MILLISECONDS)
                         if (currLoc != null && (currLoc.latitude != 0.0 || currLoc.longitude != 0.0)) {
                             foundLocation = Pair(currLoc.latitude, currLoc.longitude)
                         }
@@ -707,7 +709,7 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
                     // fall through to next tier
                 }
 
-                // Tier 2: Check LocationManager (GPS and Network)
+                // Tier 2: Check LocationManager (GPS, Network, Passive)
                 if (foundLocation == null) {
                     try {
                         val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
@@ -726,14 +728,66 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
                     }
                 }
 
-                // Tier 3: IP Geolocation Fallback (ensures 100% working in cloud/emulator environment)
+                // Tier 3: Multi-Provider IP Geolocation Fallback (ensures 100% working in cloud/emulator environment)
                 if (foundLocation == null) {
+                    val okClient = OkHttpClient.Builder()
+                        .connectTimeout(3, TimeUnit.SECONDS)
+                        .readTimeout(3, TimeUnit.SECONDS)
+                        .build()
+
+                    // Try Provider A: ipwho.is
                     try {
-                        withContext(Dispatchers.IO) {
-                            val okClient = OkHttpClient.Builder()
-                                .connectTimeout(3, TimeUnit.SECONDS)
-                                .readTimeout(3, TimeUnit.SECONDS)
+                        val req = Request.Builder()
+                            .url("https://ipwho.is/")
+                            .header("User-Agent", "RaithaDrishti-Agri/1.0")
+                            .build()
+                        val resp = okClient.newCall(req).execute()
+                        if (resp.isSuccessful) {
+                            val json = JSONObject(resp.body?.string() ?: "")
+                            if (json.optBoolean("success", false)) {
+                                val lat = json.optDouble("latitude", Double.NaN)
+                                val lon = json.optDouble("longitude", Double.NaN)
+                                val city = json.optString("city", "")
+                                val region = json.optString("region", "")
+                                if (!lat.isNaN() && !lon.isNaN() && (lat != 0.0 || lon != 0.0)) {
+                                    foundLocation = Pair(lat, lon)
+                                    if (city.isNotBlank()) detectedPlaceHint = if (region.isNotBlank()) "$city, $region" else city
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // try next provider
+                    }
+
+                    // Try Provider B: ip-api.com
+                    if (foundLocation == null) {
+                        try {
+                            val req = Request.Builder()
+                                .url("http://ip-api.com/json/")
+                                .header("User-Agent", "RaithaDrishti-Agri/1.0")
                                 .build()
+                            val resp = okClient.newCall(req).execute()
+                            if (resp.isSuccessful) {
+                                val json = JSONObject(resp.body?.string() ?: "")
+                                if (json.optString("status") == "success") {
+                                    val lat = json.optDouble("lat", Double.NaN)
+                                    val lon = json.optDouble("lon", Double.NaN)
+                                    val city = json.optString("city", "")
+                                    val region = json.optString("regionName", "")
+                                    if (!lat.isNaN() && !lon.isNaN() && (lat != 0.0 || lon != 0.0)) {
+                                        foundLocation = Pair(lat, lon)
+                                        if (city.isNotBlank()) detectedPlaceHint = if (region.isNotBlank()) "$city, $region" else city
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // try next provider
+                        }
+                    }
+
+                    // Try Provider C: ipapi.co
+                    if (foundLocation == null) {
+                        try {
                             val req = Request.Builder()
                                 .url("https://ipapi.co/json/")
                                 .header("User-Agent", "RaithaDrishti-Agri/1.0")
@@ -743,31 +797,42 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
                                 val json = JSONObject(resp.body?.string() ?: "")
                                 val lat = json.optDouble("latitude", Double.NaN)
                                 val lon = json.optDouble("longitude", Double.NaN)
+                                val city = json.optString("city", "")
+                                val region = json.optString("region", "")
                                 if (!lat.isNaN() && !lon.isNaN()) {
                                     foundLocation = Pair(lat, lon)
+                                    if (city.isNotBlank()) detectedPlaceHint = if (region.isNotBlank()) "$city, $region" else city
                                 }
                             }
+                        } catch (e: Exception) {
+                            // fall through
                         }
-                    } catch (e: Exception) {
-                        // fall through
                     }
                 }
 
                 val finalLoc = foundLocation
                 if (finalLoc != null) {
                     val (lat, lon) = finalLoc
-                    updateLocationFromGps(context, lat, lon)
-                    val locLabel = _exactLocationLabel.value ?: "Coordinates: ${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)}"
-                    onResult(true, locLabel)
+                    withContext(Dispatchers.Main) {
+                        updateLocationFromGps(context, lat, lon)
+                    }
+                    val locLabel = _exactLocationLabel.value ?: detectedPlaceHint ?: "Coordinates: ${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)}"
+                    withContext(Dispatchers.Main) {
+                        onResult(true, locLabel)
+                    }
                 } else {
                     // Default to state capital Bengaluru rather than any locked remote place
                     val defaultDistrict = KARNATAKA_DISTRICTS.find { it.name.contains("Bengaluru", ignoreCase = true) }
                         ?: KARNATAKA_DISTRICTS[0]
-                    setDistrict(defaultDistrict)
-                    onResult(false, "GPS unavailable. Selected ${defaultDistrict.name}")
+                    withContext(Dispatchers.Main) {
+                        setDistrict(defaultDistrict)
+                        onResult(false, "GPS unavailable. Selected ${defaultDistrict.name}")
+                    }
                 }
             } catch (e: Exception) {
-                onResult(false, e.localizedMessage ?: "Location acquisition error")
+                withContext(Dispatchers.Main) {
+                    onResult(false, e.localizedMessage ?: "Location acquisition error")
+                }
             } finally {
                 _isGpsDetecting.value = false
             }
@@ -775,14 +840,15 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
     }
 
     /**
-     * Searches any user-typed village, town, or taluk anywhere in Karnataka
+     * Searches any user-typed village, town, or taluk anywhere in Karnataka/India
      * and sets coordinates and weather dynamically.
+     * Uses district matcher, Android Geocoder, and OpenStreetMap Nominatim fallback.
      */
     fun searchAndSetCustomLocation(context: Context, query: String, onDone: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val trimmed = query.trim()
             if (trimmed.isBlank()) {
-                onDone(false, "Please enter a location name")
+                withContext(Dispatchers.Main) { onDone(false, "Please enter a location name") }
                 return@launch
             }
             // 1. Direct match with Karnataka districts
@@ -793,27 +859,69 @@ class RaithaDrishtiViewModel(application: Application) : AndroidViewModel(applic
                 trimmed.contains(it.name, ignoreCase = true)
             }
             if (districtMatch != null) {
-                setDistrict(districtMatch)
-                onDone(true, districtMatch.name)
+                withContext(Dispatchers.Main) {
+                    setDistrict(districtMatch)
+                    onDone(true, districtMatch.name)
+                }
                 return@launch
             }
-            // 2. Reverse Geocode via Android Geocoder
+            // 2. Geocode via Android Geocoder
+            var resolvedLat: Double? = null
+            var resolvedLon: Double? = null
+            var resolvedLabel: String? = null
+
             try {
                 val geocoder = Geocoder(context, Locale.getDefault())
                 @Suppress("DEPRECATION")
                 val results = geocoder.getFromLocationName(trimmed, 1)
                 val item = results?.firstOrNull()
                 if (item != null) {
-                    val lat = item.latitude
-                    val lon = item.longitude
-                    val label = item.locality ?: item.subAdminArea ?: trimmed
-                    updateExactCoordinates(lat, lon, label)
-                    onDone(true, label)
-                } else {
-                    onDone(false, "Could not locate '$trimmed'. Try selecting from the districts list.")
+                    resolvedLat = item.latitude
+                    resolvedLon = item.longitude
+                    resolvedLabel = item.locality ?: item.subAdminArea ?: trimmed
                 }
             } catch (e: Exception) {
-                onDone(false, "Location search error: ${e.localizedMessage ?: "Unknown error"}")
+                // fall through to Nominatim
+            }
+
+            // 3. Fallback to OpenStreetMap Nominatim (reliable when Android Geocoder service is missing on emulator)
+            if (resolvedLat == null || resolvedLon == null) {
+                try {
+                    val okClient = OkHttpClient.Builder()
+                        .connectTimeout(4, TimeUnit.SECONDS)
+                        .readTimeout(4, TimeUnit.SECONDS)
+                        .build()
+                    val searchUrl = "https://nominatim.openstreetmap.org/search?q=${Uri.encode("$trimmed, Karnataka, India")}&format=json&limit=1"
+                    val req = Request.Builder()
+                        .url(searchUrl)
+                        .header("User-Agent", "RaithaDrishti-Agri/1.0")
+                        .build()
+                    val resp = okClient.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string() ?: ""
+                        val arr = org.json.JSONArray(body)
+                        if (arr.length() > 0) {
+                            val first = arr.getJSONObject(0)
+                            resolvedLat = first.getString("lat").toDoubleOrNull()
+                            resolvedLon = first.getString("lon").toDoubleOrNull()
+                            resolvedLabel = first.optString("display_name", trimmed).split(",").firstOrNull()?.trim() ?: trimmed
+                        }
+                    }
+                } catch (e: Exception) {
+                    // fall through
+                }
+            }
+
+            if (resolvedLat != null && resolvedLon != null) {
+                val label = resolvedLabel ?: trimmed
+                withContext(Dispatchers.Main) {
+                    updateExactCoordinates(resolvedLat, resolvedLon, label)
+                    onDone(true, label)
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    onDone(false, "Could not locate '$trimmed'. Try selecting from the districts list.")
+                }
             }
         }
     }

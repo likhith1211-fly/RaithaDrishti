@@ -141,18 +141,23 @@ fun WeatherAdvisoryScreen(
                 Toast.makeText(context, if (success) "Live Location: $msg" else msg, Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(context, "Location permission denied. Showing ${selectedDistrict.name} weather.", Toast.LENGTH_SHORT).show()
+            // Even if hardware permission is denied, use IP Geolocation fallback so current location still works
+            viewModel.detectLiveLocation(context) { _, _ -> }
         }
     }
 
-    // Auto-detect live location if permission granted, otherwise fetch Google Maps AI Grounding
+    // Auto-detect live location on launch
     LaunchedEffect(Unit) {
         val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         if (fineGranted || coarseGranted) {
             viewModel.detectLiveLocation(context) { _, _ -> }
         } else {
-            viewModel.fetchMapsGroundingAdvisoryForCurrentLocation()
+            // Request permissions and trigger fallback
+            locationPermissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+            viewModel.detectLiveLocation(context) { _, _ -> }
         }
     }
 
@@ -238,12 +243,13 @@ fun WeatherAdvisoryScreen(
             locationLabel = if (isExactLocationActive && exactLocationLabel != null) exactLocationLabel!! else activeLocName,
             currentLanguage = currentLang,
             isGpsActive = isExactLocationActive,
+            isGpsDetecting = isGpsDetecting,
             onDetectGps = {
                 val finePerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
                 val coarsePerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
                 if (finePerm == PackageManager.PERMISSION_GRANTED || coarsePerm == PackageManager.PERMISSION_GRANTED) {
                     viewModel.detectLiveLocation(context) { success, msg ->
-                        Toast.makeText(context, if (success) "Live GPS: $msg" else msg, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (success) "Live Location: $msg" else msg, Toast.LENGTH_SHORT).show()
                     }
                 } else {
                     locationPermissionLauncher.launch(
@@ -264,6 +270,14 @@ fun WeatherAdvisoryScreen(
             isGroundingLoading = isGroundingLoading,
             onRefreshGrounding = {
                 viewModel.fetchMapsGroundingAdvisoryForCurrentLocation()
+            },
+            onSetPinCoordinates = { lat, lon ->
+                viewModel.updateExactCoordinates(
+                    lat,
+                    lon,
+                    "Pinned Field (${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)})"
+                )
+                Toast.makeText(context, "Location pinned: ${String.format(Locale.US, "%.3f", lat)}, ${String.format(Locale.US, "%.3f", lon)}", Toast.LENGTH_SHORT).show()
             }
         )
 

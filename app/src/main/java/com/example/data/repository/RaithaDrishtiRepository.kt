@@ -300,6 +300,15 @@ class RaithaDrishtiRepository(
         return cached?.weatherAdvisoryJson?.let { CacheConverter.weatherAdvisoryFromJson(it) }
     }
 
+    suspend fun getMapsGroundingAdvisory(
+        lat: Double,
+        lon: Double,
+        locationName: String,
+        language: AppLanguage
+    ): String {
+        return geminiService.fetchMapsGroundingAdvisory(lat, lon, locationName, language)
+    }
+
     // --- Market Analytics with Room Offline Caching ---
 
     suspend fun seedAllMarketPricesIfEmpty() {

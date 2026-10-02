@@ -4,12 +4,15 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -79,6 +82,7 @@ import com.example.data.local.CachedWeatherReportEntity
 import com.example.data.model.AppLanguage
 import com.example.data.model.KARNATAKA_DISTRICTS
 import com.example.data.model.KarnatakaDistrict
+import com.example.ui.components.InteractiveGoogleMapCard
 import com.example.ui.components.MicroWeatherWidget
 import com.example.ui.components.RaithaBlueButton
 import com.example.ui.components.RaithaCardActionButton
@@ -112,6 +116,9 @@ fun WeatherAdvisoryScreen(
     val exactLocationLabel by viewModel.exactLocationLabel.collectAsState()
     val aiAdvisory by viewModel.aiWeatherAdvisory.collectAsState()
     val isGeneratingAdvisory by viewModel.isGeneratingAdvisory.collectAsState()
+    val mapsGroundingAdvisory by viewModel.mapsGroundingAdvisory.collectAsState()
+    val isGroundingLoading by viewModel.isMapsGroundingLoading.collectAsState()
+    val isGpsDetecting by viewModel.isGpsDetecting.collectAsState()
 
     val cachedWeatherReports by viewModel.allCachedWeatherReports.collectAsState()
 
@@ -122,7 +129,7 @@ fun WeatherAdvisoryScreen(
     val activeLon = currentWeather?.longitude ?: selectedDistrict.lon
     val activeLocName = currentWeather?.location ?: selectedDistrict.name
 
-    // Location Permission Launcher with high-accuracy live GPS query & reverse geocoding
+    // Location Permission Launcher with bulletproof multi-tiered detection
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -130,39 +137,22 @@ fun WeatherAdvisoryScreen(
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (granted) {
-            try {
-                val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-                fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { loc: Location? ->
-                        if (loc != null) {
-                            viewModel.updateLocationFromGps(context, loc.latitude, loc.longitude)
-                            Toast.makeText(context, "ನಿಮ್ಮ ನೈಜ ಜಿಪಿಎಸ್ ಸ್ಥಳ ಸಂಪರ್ಕಗೊಂಡಿದೆ / Live GPS Connected!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            fusedClient.lastLocation.addOnSuccessListener { lastLoc ->
-                                if (lastLoc != null) {
-                                    viewModel.updateLocationFromGps(context, lastLoc.latitude, lastLoc.longitude)
-                                    Toast.makeText(context, "GPS Location Updated", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                                    val lastKnown = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                                        ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                                    if (lastKnown != null) {
-                                        viewModel.updateLocationFromGps(context, lastKnown.latitude, lastKnown.longitude)
-                                    } else {
-                                        Toast.makeText(context, "GPS ಸಿಗ್ನಲ್ ಹುಡುಕಲಾಗುತ್ತಿದೆ. ದಯವಿಟ್ಟು ಜಿಲ್ಲೆಯನ್ನು ಆರಿಸಿ.", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .addOnFailureListener {
-                        Toast.makeText(context, "GPS Error. Please select your district.", Toast.LENGTH_SHORT).show()
-                    }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Location detection error. Please select your district.", Toast.LENGTH_SHORT).show()
+            viewModel.detectLiveLocation(context) { success, msg ->
+                Toast.makeText(context, if (success) "Live Location: $msg" else msg, Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(context, "Location permission denied. Showing selected district weather.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Location permission denied. Showing ${selectedDistrict.name} weather.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Auto-detect live location if permission granted, otherwise fetch Google Maps AI Grounding
+    LaunchedEffect(Unit) {
+        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fineGranted || coarseGranted) {
+            viewModel.detectLiveLocation(context) { _, _ -> }
+        } else {
+            viewModel.fetchMapsGroundingAdvisoryForCurrentLocation()
         }
     }
 
@@ -241,157 +231,41 @@ fun WeatherAdvisoryScreen(
             }
         }
 
-        // Exact GPS Location Action Button & Indicator
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isExactLocationActive) Color(0xFFF4F9F5) else MaterialTheme.colorScheme.surface
-            ),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                if (isExactLocationActive) com.example.ui.theme.SovereignGold else com.example.ui.theme.LightBorder
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(
-                                    (if (isExactLocationActive) com.example.ui.theme.ForestGreenPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.12f),
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isExactLocationActive) Icons.Default.LocationOn else Icons.Default.MyLocation,
-                                contentDescription = null,
-                                tint = if (isExactLocationActive) com.example.ui.theme.ForestGreenPrimary else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (isExactLocationActive) {
-                                    when (currentLang) {
-                                        AppLanguage.KANNADA -> "ನಿಖರ ಜಿಪಿಎಸ್ ಸ್ಥಳ ಸಕ್ರಿಯವಾಗಿದೆ"
-                                        AppLanguage.HINDI -> "सटीक जीपीएस सक्रिय है"
-                                        AppLanguage.ENGLISH -> "Exact GPS Location Active"
-                                    }
-                                } else {
-                                    when (currentLang) {
-                                        AppLanguage.KANNADA -> "ನಿಮ್ಮ ನಿಖರ ಹೊಲದ ಹವಾಮಾನ ಪಡೆಯಿರಿ"
-                                        AppLanguage.HINDI -> "अपने सटीक खेत का मौसम देखें"
-                                        AppLanguage.ENGLISH -> "Use Exact GPS Farm Location"
-                                    }
-                                },
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = if (isExactLocationActive) com.example.ui.theme.ForestGreenPrimary else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (isExactLocationActive && exactLocationLabel != null) {
-                                    exactLocationLabel!!
-                                } else {
-                                    "${selectedDistrict.name} (${selectedDistrict.kannadaName} • Lat: ${String.format(Locale.US, "%.3f", activeLat)}, Lon: ${String.format(Locale.US, "%.3f", activeLon)})"
-                                },
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = ForestGreenPrimary
-                            )
-                        }
+        // Interactive Google Maps Hub & Live GPS
+        InteractiveGoogleMapCard(
+            latitude = activeLat,
+            longitude = activeLon,
+            locationLabel = if (isExactLocationActive && exactLocationLabel != null) exactLocationLabel!! else activeLocName,
+            currentLanguage = currentLang,
+            isGpsActive = isExactLocationActive,
+            onDetectGps = {
+                val finePerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                val coarsePerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                if (finePerm == PackageManager.PERMISSION_GRANTED || coarsePerm == PackageManager.PERMISSION_GRANTED) {
+                    viewModel.detectLiveLocation(context) { success, msg ->
+                        Toast.makeText(context, if (success) "Live GPS: $msg" else msg, Toast.LENGTH_SHORT).show()
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    RaithaGoldButton(
-                        text = when (currentLang) {
-                            AppLanguage.KANNADA -> "ಜಿಪಿಎಸ್"
-                            AppLanguage.HINDI -> "जीपीएस"
-                            AppLanguage.ENGLISH -> "Live GPS"
-                        },
-                        icon = Icons.Default.MyLocation,
-                        height = 44.dp,
-                        fontSize = 13.5.sp,
-                        onClick = {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                        },
-                        modifier = Modifier.testTag("get_gps_button")
+                } else {
+                    locationPermissionLauncher.launch(
+                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
                     )
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Highlighted Action Row: Open in Maps & Change Location
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // 1. Open Exact Location in Google Maps (Vibrant Blue Highlighted Button)
-                    RaithaBlueButton(
-                        text = when (currentLang) {
-                            AppLanguage.KANNADA -> "ಗೂಗಲ್ ಮ್ಯಾಪ್ಸ್"
-                            AppLanguage.HINDI -> "Google Maps"
-                            AppLanguage.ENGLISH -> "Google Maps"
-                        },
-                        icon = Icons.Default.Map,
-                        height = 46.dp,
-                        fontSize = 12.5.sp,
-                        onClick = {
-                            val encodedName = Uri.encode(activeLocName)
-                            val geoUri = Uri.parse("geo:0,0?q=$activeLat,$activeLon($encodedName)")
-                            val mapIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
-                                setPackage("com.google.android.apps.maps")
-                            }
-                            try {
-                                context.startActivity(mapIntent)
-                            } catch (e: Exception) {
-                                val webIntent = Intent(
-                                    Intent.ACTION_VIEW,
-                                    Uri.parse("https://www.google.com/maps/search/?api=1&query=$activeLat,$activeLon")
-                                )
-                                context.startActivity(webIntent)
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("open_in_google_maps_button")
-                    )
-
-                    // 2. Select Location Dialog (Highlighted Outlined Button)
-                    RaithaOutlinedHighlightedButton(
-                        text = when (currentLang) {
-                            AppLanguage.KANNADA -> "ಸ್ಥಳ ಬದಲಿಸಿ"
-                            AppLanguage.HINDI -> "स्थान बदलें"
-                            AppLanguage.ENGLISH -> "Change Location"
-                        },
-                        icon = Icons.Default.PinDrop,
-                        height = 46.dp,
-                        onClick = { showGoogleMapsPinDialog = true },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("pick_coordinates_button")
-                    )
+            },
+            onSelectDistrict = { district ->
+                viewModel.setDistrict(district)
+                Toast.makeText(context, "Selected: ${district.name}", Toast.LENGTH_SHORT).show()
+            },
+            onSearchPlace = { query ->
+                viewModel.searchAndSetCustomLocation(context, query) { success, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
+            },
+            mapsGroundingSummary = mapsGroundingAdvisory,
+            isGroundingLoading = isGroundingLoading,
+            onRefreshGrounding = {
+                viewModel.fetchMapsGroundingAdvisoryForCurrentLocation()
             }
-        }
+        )
 
         // Gemini AI Weather Advisory Card
         Card(
